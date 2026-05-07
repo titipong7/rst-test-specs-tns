@@ -187,7 +187,8 @@ class TestRDAPNonExistentDomain:
         """A query for a randomly generated domain MUST return HTTP 404."""
         for entry in rdap_base_urls:
             base_url = entry["baseURL"]
-            random_name = f"nonexistent-{uuid.uuid4().hex}.example"
+            tld = entry["tld"]
+            random_name = f"nonexistent-{uuid.uuid4().hex}.{tld}"
             url = f"{base_url}domain/{random_name}"
             logger.info("GET %s (expecting 404)", url)
             response = rdap_session.get(url, timeout=DEFAULT_TIMEOUT)

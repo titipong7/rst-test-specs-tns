@@ -20,7 +20,6 @@ pytestmark = [pytest.mark.rdap, pytest.mark.slow]
 
 # Minimum acceptable TLS version per RST spec (rdap-91)
 REQUIRED_TLS_VERSION = ssl.TLSVersion.TLSv1_2
-FORBIDDEN_TLS_VERSIONS = [ssl.TLSVersion.TLSv1, ssl.TLSVersion.SSLv3]
 
 
 def _get_host_port(base_url: str) -> tuple[str, int]:

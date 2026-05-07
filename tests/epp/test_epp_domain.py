@@ -78,9 +78,17 @@ class TestEPPDomainCheck:
             f"Registered domain '{domain}' reported as available"
         )
 
-    def test_check_random_domain_available(self, epp_client: EPPClient) -> None:
+    def test_check_random_domain_available(
+        self, epp_client: EPPClient, epp_config: dict
+    ) -> None:
         """A randomly generated domain name MUST be reported as available."""
-        random_domain = f"rst-check-{uuid.uuid4().hex[:12]}.example"
+        registered = epp_config.get("registered_names", [])
+        # Derive TLD from a configured registered name, fallback to "example"
+        if registered:
+            tld = registered[0].split(".")[-1]
+        else:
+            tld = "example"
+        random_domain = f"rst-check-{uuid.uuid4().hex[:12]}.{tld}"
         response = epp_client.send_command(_build_check([random_domain]))
         code = EPPClient.result_code(response)
         assert code == 1000, f"domain:check failed with code {code}"
@@ -119,13 +127,15 @@ class TestEPPDomainInfo:
         assert info_data is not None, "<domain:infData> not found in response"
 
     def test_info_nonexistent_domain_returns_2303(
-        self, epp_client: EPPClient
+        self, epp_client: EPPClient, epp_config: dict
     ) -> None:
         """
         EPP <info> on a non-existent domain MUST return result code 2303
         (Object does not exist).
         """
-        nonexistent = f"nonexistent-{uuid.uuid4().hex}.example"
+        registered = epp_config.get("registered_names", [])
+        tld = registered[0].split(".")[-1] if registered else "example"
+        nonexistent = f"nonexistent-{uuid.uuid4().hex}.{tld}"
         response = epp_client.send_command(_build_info(nonexistent))
         code = EPPClient.result_code(response)
         assert code == 2303, (
