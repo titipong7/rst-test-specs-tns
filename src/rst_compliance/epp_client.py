@@ -8,6 +8,10 @@ import ssl
 import xml.etree.ElementTree as ET
 
 
+REQUIRED_KEY_ALGORITHM = "RSA"
+REQUIRED_KEY_SIZE_BITS = 4096
+
+
 @dataclass(frozen=True)
 class EppMtlsConfig:
     host: str
@@ -16,13 +20,13 @@ class EppMtlsConfig:
     ca_cert_file: Path | None = None
     port: int = 700
     timeout_seconds: int = 30
-    key_algorithm: str = "RSA"
-    key_size_bits: int = 4096
+    key_algorithm: str = REQUIRED_KEY_ALGORITHM
+    key_size_bits: int = REQUIRED_KEY_SIZE_BITS
 
     def __post_init__(self) -> None:
-        if self.key_algorithm.upper() != "RSA":
+        if self.key_algorithm.upper() != REQUIRED_KEY_ALGORITHM:
             raise ValueError("ICANN 2026 EPP mTLS profile requires RSA client keys")
-        if self.key_size_bits != 4096:
+        if self.key_size_bits != REQUIRED_KEY_SIZE_BITS:
             raise ValueError("ICANN 2026 EPP mTLS profile requires 4096-bit client keys")
 
 

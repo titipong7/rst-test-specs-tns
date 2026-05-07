@@ -103,12 +103,12 @@ def test_epp27_blocks_delegation_to_glueless_internal_host(tmp_path: Path) -> No
     assert EppClient.result_code(update_response) == 2306
 
 
-def test_epp_client_requires_rsa_4096_mtls_keys() -> None:
+def test_epp_client_requires_rsa_4096_mtls_keys(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="4096-bit"):
         EppMtlsConfig(
             host="epp.example.test",
-            client_cert_file=Path("/tmp/cert.pem"),
-            client_key_file=Path("/tmp/key.pem"),
+            client_cert_file=tmp_path / "cert.pem",
+            client_key_file=tmp_path / "key.pem",
             key_algorithm="RSA",
             key_size_bits=2048,
         )
