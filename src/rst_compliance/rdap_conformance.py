@@ -92,7 +92,7 @@ def validate_rdap_payload(*, payload: dict[str, Any], registry_data_model: Regis
         if vcard_array[0] != "vcard":
             raise RdapConformanceError("entity vcardArray must start with 'vcard'")
 
-    if model is RegistryDataModel.MAXIMUM and not _has_registrant_entity(entities):
+    if model == RegistryDataModel.MAXIMUM and not _has_registrant_entity(entities):
         raise RdapConformanceError(
             "maximum registry data model requires at least one registrant entity"
         )
