@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rst-compliance-suite"
+version = "0.1.0"
+description = "Pytest suite scaffold for ICANN RST v2026.04 compliance testing"
+requires-python = ">=3.10"
+dependencies = [
+  "pytest==8.3.5",
+  "requests==2.32.3",
+  "jsonschema==4.23.0",
+  "xmlschema==3.4.5"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"

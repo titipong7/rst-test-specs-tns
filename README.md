@@ -47,6 +47,21 @@ The simplest way to build the specification is to run `docker compose run spec`
 (you obviously need Docker). The first run will take a while as it needs to
 build the image, but it will be quite fast after that.
 
+## Python Pytest scaffold for RST v2026.04 compliance
+
+A Python-based Pytest scaffold is available for developing automated compliance
+tests for RST v2026.04 in:
+
+* `src/rst_compliance/` (RST API trigger client, schema validators, log model)
+* `tests/` (service trigger, schema validation, and log tests)
+* `schemas/rst-api-spec/v2026.4/` (location for official JSON/XML schemas)
+
+To run it:
+
+1. Create a virtual environment.
+2. Install the project in editable mode: `pip install -e .`
+3. Run tests: `pytest`
+
 ## Releasing a new version
 
 1. Make the changes you want to make.
