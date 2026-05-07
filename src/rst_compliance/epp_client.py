@@ -85,7 +85,7 @@ class EppClient:
             purpose=ssl.Purpose.SERVER_AUTH,
             cafile=str(self.config.ca_cert_file) if self.config.ca_cert_file else None,
         )
-        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.minimum_version = ssl.TLSVersion.TLSv1_3
         context.load_cert_chain(
             certfile=str(self.config.client_cert_file),
             keyfile=str(self.config.client_key_file),
