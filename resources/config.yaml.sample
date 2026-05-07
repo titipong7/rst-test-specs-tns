@@ -1,0 +1,37 @@
+# resources/config.yaml
+# ---------------------------------------------------------------------------
+# RST 2.0 API Testing Framework – Sample Configuration
+#
+# Copy this file to resources/config.yaml and fill in the values for your
+# registry environment.  The file is git-ignored so secrets will not be
+# committed.
+# ---------------------------------------------------------------------------
+
+epp:
+  host: epp.example.com        # EPP server hostname (required)
+  port: 700                    # EPP server port (default: 700)
+  clid: clid-01                # Primary client ID (required)
+  pwd: secret-password         # Primary password (required)
+  # tls_cert: resources/client.pem   # PEM client certificate (optional)
+  # tls_key:  resources/client.key   # PEM client private key (optional)
+
+  host_model: objects          # "objects" or "attributes"
+  registered_names:
+    - example.example
+  registered_contacts:
+    - abc123
+    - def456
+
+rdap:
+  base_urls:
+    - tld: example
+      baseURL: "https://rdap.example.com/example/"
+  test_domains:
+    - tld: example
+      name: example.example
+  test_nameservers:
+    - tld: example
+      nameserver: ns1.example.example
+  test_entities:
+    - tld: example
+      handle: "9995"

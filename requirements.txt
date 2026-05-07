@@ -1,0 +1,20 @@
+# Core test runner
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+
+# HTTP client for RDAP (REST/JSON)
+requests>=2.31.0
+httpx>=0.26.0
+
+# JSON Schema / response validation
+pydantic>=2.5.0
+
+# XML / EPP handling
+lxml>=5.1.0
+
+# TLS / Certificate handling
+pyopenssl>=23.3.0
+cryptography>=41.0.0
+
+# Configuration & data loading
+PyYAML>=6.0.1
