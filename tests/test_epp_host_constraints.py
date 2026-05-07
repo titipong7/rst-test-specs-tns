@@ -1,0 +1,113 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from rst_compliance.epp_client import EppClient, EppMtlsConfig
+
+
+_SUCCESS = '<epp><response><result code="1000"><msg>Command completed successfully</msg></result></response></epp>'
+_POLICY_ERROR = '<epp><response><result code="2306"><msg>Parameter value policy error</msg></result></response></epp>'
+
+
+class _FakeTransport:
+    def __init__(self, responses: list[str]) -> None:
+        self.responses = responses
+        self.calls: list[dict[str, Any]] = []
+
+    def send(self, *, xml_command: str, host: str, port: int, timeout_seconds: int, **_: Any) -> str:
+        self.calls.append(
+            {
+                "xml_command": xml_command,
+                "host": host,
+                "port": port,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+        return self.responses.pop(0)
+
+
+def _config() -> EppMtlsConfig:
+    return EppMtlsConfig(
+        host="epp.example.test",
+        client_cert_file=Path("/tmp/cert.pem"),
+        client_key_file=Path("/tmp/key.pem"),
+        key_algorithm="RSA",
+        key_size_bits=4096,
+    )
+
+
+def test_epp26_blocks_cross_client_internal_host_with_glue() -> None:
+    transport = _FakeTransport(responses=[_POLICY_ERROR])
+    client = EppClient(config=_config(), transport=transport, ssl_context=object())
+
+    create_host_with_glue = """
+    <epp>
+      <command>
+        <create>
+          <host:create xmlns:host='urn:ietf:params:xml:ns:host-1.0'>
+            <host:name>ns1.victim-registrant.example.test</host:name>
+            <host:addr ip='v4'>192.0.2.44</host:addr>
+          </host:create>
+        </create>
+      </command>
+    </epp>
+    """
+
+    response = client.send_command(create_host_with_glue)
+
+    assert client.is_success(response) is False
+    assert EppClient.result_code(response) == 2306
+
+
+def test_epp27_blocks_delegation_to_glueless_internal_host() -> None:
+    transport = _FakeTransport(responses=[_SUCCESS, _POLICY_ERROR])
+    client = EppClient(config=_config(), transport=transport, ssl_context=object())
+
+    create_glueless_internal_host = """
+    <epp>
+      <command>
+        <create>
+          <host:create xmlns:host='urn:ietf:params:xml:ns:host-1.0'>
+            <host:name>ns2.victim-registrant.example.test</host:name>
+          </host:create>
+        </create>
+      </command>
+    </epp>
+    """
+    add_host_to_domain = """
+    <epp>
+      <command>
+        <update>
+          <domain:update xmlns:domain='urn:ietf:params:xml:ns:domain-1.0'>
+            <domain:name>victim-registrant.example.test</domain:name>
+            <domain:add>
+              <domain:ns>
+                <domain:hostObj>ns2.victim-registrant.example.test</domain:hostObj>
+              </domain:ns>
+            </domain:add>
+          </domain:update>
+        </update>
+      </command>
+    </epp>
+    """
+
+    create_response = client.send_command(create_glueless_internal_host)
+    update_response = client.send_command(add_host_to_domain)
+
+    assert client.is_success(create_response) is True
+    assert client.is_success(update_response) is False
+    assert EppClient.result_code(update_response) == 2306
+
+
+def test_epp_client_requires_rsa_4096_mtls_keys() -> None:
+    with pytest.raises(ValueError, match="4096-bit"):
+        EppMtlsConfig(
+            host="epp.example.test",
+            client_cert_file=Path("/tmp/cert.pem"),
+            client_key_file=Path("/tmp/key.pem"),
+            key_algorithm="RSA",
+            key_size_bits=2048,
+        )
