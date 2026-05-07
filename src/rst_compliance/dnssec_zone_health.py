@@ -51,7 +51,7 @@ def _name_to_wire(name: str) -> bytes:
 
 
 def _dnskey_rdata(key: DNSKEYRecord) -> bytes:
-    key_bytes = base64.b64decode(key.public_key_b64.encode("ascii"), validate=False)
+    key_bytes = base64.b64decode(key.public_key_b64.encode("ascii"), validate=True)
     return key.flags.to_bytes(2, "big") + bytes([key.protocol, key.algorithm]) + key_bytes
 
 
@@ -65,8 +65,6 @@ def dnskey_key_tag(key: DNSKEYRecord) -> int:
 
 
 def _digest_bytes(data: bytes, digest_type: int) -> bytes | None:
-    if digest_type == 1:
-        return hashlib.sha1(data).digest()
     if digest_type == 2:
         return hashlib.sha256(data).digest()
     if digest_type == 4:
