@@ -8,3 +8,9 @@ rst.json
 rdapct_config*.json
 releases.json
 releases.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
