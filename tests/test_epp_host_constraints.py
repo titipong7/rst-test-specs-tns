@@ -49,7 +49,7 @@ def test_epp26_blocks_unauthorized_internal_host_with_glue_creation(tmp_path: Pa
       <command>
         <create>
           <host:create xmlns:host='urn:ietf:params:xml:ns:host-1.0'>
-            <host:name>ns1.victim-registrant.example.test</host:name>
+            <host:name>ns1.other-client.example.test</host:name>
             <host:addr ip='v4'>192.0.2.44</host:addr>
           </host:create>
         </create>
@@ -72,7 +72,7 @@ def test_epp27_blocks_unauthorized_delegation_to_glueless_internal_host(tmp_path
       <command>
         <create>
           <host:create xmlns:host='urn:ietf:params:xml:ns:host-1.0'>
-            <host:name>ns2.victim-registrant.example.test</host:name>
+            <host:name>ns2.other-client.example.test</host:name>
           </host:create>
         </create>
       </command>
@@ -83,10 +83,10 @@ def test_epp27_blocks_unauthorized_delegation_to_glueless_internal_host(tmp_path
       <command>
         <update>
           <domain:update xmlns:domain='urn:ietf:params:xml:ns:domain-1.0'>
-            <domain:name>victim-registrant.example.test</domain:name>
+            <domain:name>other-client.example.test</domain:name>
             <domain:add>
               <domain:ns>
-                <domain:hostObj>ns2.victim-registrant.example.test</domain:hostObj>
+                <domain:hostObj>ns2.other-client.example.test</domain:hostObj>
               </domain:ns>
             </domain:add>
           </domain:update>

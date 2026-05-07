@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 
 REQUIRED_KEY_ALGORITHM = "RSA"
 REQUIRED_KEY_SIZE_BITS = 4096
+RECV_BUFFER_SIZE = 4096
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,7 @@ class SocketEppTransport:
                 tls_sock.sendall(xml_command.encode("utf-8"))
                 chunks: list[bytes] = []
                 while True:
-                    chunk = tls_sock.recv(4096)
+                    chunk = tls_sock.recv(RECV_BUFFER_SIZE)
                     if not chunk:
                         break
                     chunks.append(chunk)
