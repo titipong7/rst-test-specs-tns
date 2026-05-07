@@ -11,8 +11,12 @@ dependencies = [
   "pytest==8.3.5",
   "requests==2.32.3",
   "jsonschema==4.23.0",
-  "xmlschema==3.4.5"
+  "xmlschema==3.4.5",
+  "dnspython==2.8.0"
 ]
+
+[project.scripts]
+rst-dnssec-zone-health = "rst_compliance.dnssec_zone_health:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

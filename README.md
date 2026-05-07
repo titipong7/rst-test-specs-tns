@@ -62,6 +62,20 @@ To run it:
 2. Install the project in editable mode: `pip install -e .`
 3. Run tests: `pytest`
 
+The scaffold also includes a DNSSEC helper CLI that performs a focused RST
+v2026.04-style health check for:
+
+* algorithm rollover readiness using `RSASHA256` (algorithm 8) and
+  `ECDSAP256SHA256` (algorithm 13);
+* parent `DS` to child `DNSKEY` matching;
+* Zonemaster error-tag normalization into `ZM_*` RST error codes.
+
+Run it with:
+
+```sh
+rst-dnssec-zone-health example.tld --zonemaster-output /path/to/zonemaster-output.json
+```
+
 ## Releasing a new version
 
 1. Make the changes you want to make.
