@@ -62,6 +62,10 @@ To run it:
 2. Install the project in editable mode: `pip install -e .`
 3. Run tests: `pytest`
 
+DNSSEC zone-health helper script for RST v2026.04 criteria:
+
+* `tools/validate-dnssec-zone-health.py <zone> [--resolver <ip>] [--zonemaster-output <json-file>]`
+
 ## Releasing a new version
 
 1. Make the changes you want to make.
