@@ -25,9 +25,13 @@ class EppMtlsConfig:
 
     def __post_init__(self) -> None:
         if self.key_algorithm.upper() != REQUIRED_KEY_ALGORITHM:
-            raise ValueError("ICANN 2026 EPP mTLS profile requires RSA client keys")
+            raise ValueError(
+                f"ICANN 2026 EPP mTLS profile requires RSA client keys, got: {self.key_algorithm}"
+            )
         if self.key_size_bits != REQUIRED_KEY_SIZE_BITS:
-            raise ValueError("ICANN 2026 EPP mTLS profile requires 4096-bit client keys")
+            raise ValueError(
+                f"ICANN 2026 EPP mTLS profile requires 4096-bit client keys, got: {self.key_size_bits} bits"
+            )
 
 
 class EppTransport(Protocol):

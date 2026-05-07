@@ -40,7 +40,7 @@ def _config(base_dir: Path) -> EppMtlsConfig:
     )
 
 
-def test_epp26_blocks_cross_client_internal_host_with_glue(tmp_path: Path) -> None:
+def test_epp26_blocks_unauthorized_internal_host_with_glue_creation(tmp_path: Path) -> None:
     transport = _FakeTransport(responses=[_POLICY_ERROR])
     client = EppClient(config=_config(tmp_path), transport=transport, ssl_context=Mock(name="ssl_context"))
 
@@ -63,7 +63,7 @@ def test_epp26_blocks_cross_client_internal_host_with_glue(tmp_path: Path) -> No
     assert EppClient.result_code(response) == 2306
 
 
-def test_epp27_blocks_delegation_to_glueless_internal_host(tmp_path: Path) -> None:
+def test_epp27_blocks_unauthorized_delegation_to_glueless_internal_host(tmp_path: Path) -> None:
     transport = _FakeTransport(responses=[_SUCCESS, _POLICY_ERROR])
     client = EppClient(config=_config(tmp_path), transport=transport, ssl_context=Mock(name="ssl_context"))
 
