@@ -1,0 +1,16 @@
+LICENSE
+README.md
+pyproject.toml
+src/rst_compliance/__init__.py
+src/rst_compliance/client.py
+src/rst_compliance/config.py
+src/rst_compliance/schema_validation.py
+src/rst_compliance/testcase_log.py
+src/rst_compliance_suite.egg-info/PKG-INFO
+src/rst_compliance_suite.egg-info/SOURCES.txt
+src/rst_compliance_suite.egg-info/dependency_links.txt
+src/rst_compliance_suite.egg-info/requires.txt
+src/rst_compliance_suite.egg-info/top_level.txt
+tests/test_rst_triggers.py
+tests/test_schema_validation.py
+tests/test_testcase_log.py

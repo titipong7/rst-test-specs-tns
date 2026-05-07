@@ -9,6 +9,7 @@ from typing import Any
 
 @dataclass
 class TestCaseLog:
+    __test__ = False
     testCaseId: str
     service: str
     status: str
