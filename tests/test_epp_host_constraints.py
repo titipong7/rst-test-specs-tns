@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
@@ -29,19 +30,19 @@ class _FakeTransport:
         return self.responses.pop(0)
 
 
-def _config() -> EppMtlsConfig:
+def _config(base_dir: Path) -> EppMtlsConfig:
     return EppMtlsConfig(
         host="epp.example.test",
-        client_cert_file=Path("/tmp/cert.pem"),
-        client_key_file=Path("/tmp/key.pem"),
+        client_cert_file=base_dir / "cert.pem",
+        client_key_file=base_dir / "key.pem",
         key_algorithm="RSA",
         key_size_bits=4096,
     )
 
 
-def test_epp26_blocks_cross_client_internal_host_with_glue() -> None:
+def test_epp26_blocks_cross_client_internal_host_with_glue(tmp_path: Path) -> None:
     transport = _FakeTransport(responses=[_POLICY_ERROR])
-    client = EppClient(config=_config(), transport=transport, ssl_context=object())
+    client = EppClient(config=_config(tmp_path), transport=transport, ssl_context=Mock(name="ssl_context"))
 
     create_host_with_glue = """
     <epp>
@@ -62,9 +63,9 @@ def test_epp26_blocks_cross_client_internal_host_with_glue() -> None:
     assert EppClient.result_code(response) == 2306
 
 
-def test_epp27_blocks_delegation_to_glueless_internal_host() -> None:
+def test_epp27_blocks_delegation_to_glueless_internal_host(tmp_path: Path) -> None:
     transport = _FakeTransport(responses=[_SUCCESS, _POLICY_ERROR])
-    client = EppClient(config=_config(), transport=transport, ssl_context=object())
+    client = EppClient(config=_config(tmp_path), transport=transport, ssl_context=Mock(name="ssl_context"))
 
     create_glueless_internal_host = """
     <epp>
