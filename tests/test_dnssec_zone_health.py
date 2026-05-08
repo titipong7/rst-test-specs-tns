@@ -57,11 +57,10 @@ def test_validate_zone_health_fails_on_missing_algorithm_unmatched_ds_and_unknow
 def test_load_rst_error_codes_reads_top_level_yaml_keys(tmp_path: Path) -> None:
     errors_file = tmp_path / "errors.yaml"
     errors_file.write_text(
-        """DNSSEC_INVALID_SIGNING_ALGORITHM:\n"
+        "DNSSEC_INVALID_SIGNING_ALGORITHM:\n"
         "  Severity: ERROR\n"
         "DNSSEC_DNS_QUERY_ERROR:\n"
-        "  Severity: ERROR\n"
-        """,
+        "  Severity: ERROR\n",
         encoding="utf-8",
     )
 
