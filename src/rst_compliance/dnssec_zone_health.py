@@ -99,10 +99,13 @@ def _extract_tag_values(value: Any) -> list[str]:
 
 
 def extract_zonemaster_tags(result: dict[str, Any]) -> list[str]:
-    seen: dict[str, None] = {}
+    seen: set[str] = set()
+    ordered_tags: list[str] = []
     for tag in _extract_tag_values(result):
-        seen.setdefault(tag, None)
-    return list(seen.keys())
+        if tag not in seen:
+            seen.add(tag)
+            ordered_tags.append(tag)
+    return ordered_tags
 
 
 def load_rst_error_codes(error_code_files: list[Path]) -> set[str]:
