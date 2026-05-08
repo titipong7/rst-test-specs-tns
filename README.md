@@ -72,6 +72,18 @@ The script validates DNSSEC algorithm rollover readiness (RSA/SHA-256 and
 ECDSA P-256), checks DS-to-DNSKEY alignment, and maps parsed Zonemaster tags to
 RST DNSSEC error codes.
 
+### RDE deposit validation helper script
+
+For RST v2026.04 RDE checks (including `rde-13` review updates for registrar and
+NNDN uniqueness), use:
+
+`python -m rst_compliance.rde_deposit_helper --xml-file <decrypted-rde-xml> --deposit-filename <deposit.ryde> --signature-filename <deposit.sig> --public-key-filename <key.asc> --tld <tld> --manifest-output <manifest.json>`
+
+The script validates deposit filename constraints aligned with v2026.4,
+validates registrar and NNDN uniqueness in XML deposits, and generates an
+ICANN-style input manifest (`inputTemplateVersion`, `service`, and
+`inputParameters`).
+
 ## Releasing a new version
 
 1. Make the changes you want to make.
