@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import argparse
-import html
+import ast
 import json
 import os
+import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
-DEFAULT_MODULES = ("epp", "rdap", "dns")
+from rst_compliance.fips_check import check_hsm_fips_140_3_mode
+
+SPEC_REFERENCE = "ICANN RST v2026.04"
+CASE_ID_PATTERN = re.compile(r"\b(?:dns|rdap|epp|rde)-\d+\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -33,27 +38,57 @@ def resolve_paths(*, project_root: Path | None = None, repo_root: Path | None = 
     return DashboardPaths(
         repo_root=effective_repo_root,
         project_root=effective_project_root,
-        tests_root=effective_project_root / "tests",
-        schemas_root=effective_project_root / "schemas",
+        tests_root=effective_repo_root / "tests",
+        schemas_root=effective_repo_root / "schemas",
         reports_root=effective_project_root / "reports",
     )
 
 
-def ensure_layout(paths: DashboardPaths, modules: Sequence[str] = DEFAULT_MODULES) -> None:
-    for module in modules:
-        (paths.tests_root / module).mkdir(parents=True, exist_ok=True)
-    for schema_dir in ("json", "xml"):
-        (paths.schemas_root / schema_dir).mkdir(parents=True, exist_ok=True)
+def ensure_layout(paths: DashboardPaths) -> None:
     paths.reports_root.mkdir(parents=True, exist_ok=True)
 
 
-def discover_tests(*, tests_root: Path, modules: Sequence[str] = DEFAULT_MODULES) -> dict[str, list[str]]:
+def discover_tests(*, tests_root: Path, modules: Sequence[str] | None = None) -> dict[str, list[str]]:
+    module_filter = set(modules or [])
     discovered: dict[str, list[str]] = {}
-    for module in modules:
-        module_root = tests_root / module
-        files = sorted(str(path.relative_to(tests_root)) for path in module_root.rglob("test_*.py"))
-        discovered[module] = files
+    for path in sorted(tests_root.rglob("test_*.py")):
+        relative = path.relative_to(tests_root)
+        module = relative.parts[0] if len(relative.parts) > 1 else "tests"
+        if module_filter and module not in module_filter:
+            continue
+        discovered.setdefault(module, []).append(str(relative))
+    if module_filter:
+        for module in modules or ():
+            discovered.setdefault(module, [])
     return discovered
+
+
+def map_spec_criteria(*, tests_root: Path, modules: Sequence[str] | None = None) -> list[dict[str, Any]]:
+    module_filter = set(modules or [])
+    mappings: list[dict[str, Any]] = []
+    for path in sorted(tests_root.rglob("test_*.py")):
+        relative = path.relative_to(tests_root)
+        module = relative.parts[0] if len(relative.parts) > 1 else "tests"
+        if module_filter and module not in module_filter:
+            continue
+        source = path.read_text(encoding="utf-8")
+        parsed = ast.parse(source)
+        for node in parsed.body:
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                labels = set(CASE_ID_PATTERN.findall(node.name))
+                docstring = ast.get_docstring(node)
+                if docstring:
+                    labels.update(CASE_ID_PATTERN.findall(docstring))
+                mappings.append(
+                    {
+                        "testName": node.name,
+                        "file": str(relative),
+                        "module": module,
+                        "rstSpecVersion": SPEC_REFERENCE,
+                        "criteriaIds": sorted(label.lower() for label in labels),
+                    }
+                )
+    return mappings
 
 
 def summarize_schemas(*, schemas_root: Path) -> dict[str, Any]:
@@ -67,17 +102,30 @@ def summarize_schemas(*, schemas_root: Path) -> dict[str, Any]:
     }
 
 
-def run_pytest(*, repo_root: Path, test_files: Sequence[Path]) -> dict[str, Any]:
+def run_pytest(*, repo_root: Path, test_files: Sequence[Path], html_report: Path, junit_report: Path) -> dict[str, Any]:
     if not test_files:
         return {
             "status": "skipped",
             "returncode": 0,
             "command": [],
-            "stdout": "No tests discovered under internal-rst-checker/tests.",
+            "stdout": "No tests discovered under tests/.",
             "stderr": "",
+            "htmlReport": str(html_report),
+            "junitReport": str(junit_report),
         }
 
-    command = [sys.executable, "-m", "pytest", "-q", *[str(path) for path in test_files]]
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-q",
+        *[str(path) for path in test_files],
+        "--html",
+        str(html_report),
+        "--self-contained-html",
+        "--junitxml",
+        str(junit_report),
+    ]
     env = os.environ.copy()
     pythonpath_entries = [str(repo_root / "src")]
     if env.get("PYTHONPATH"):
@@ -98,16 +146,109 @@ def run_pytest(*, repo_root: Path, test_files: Sequence[Path]) -> dict[str, Any]
         "command": command,
         "stdout": completed.stdout,
         "stderr": completed.stderr,
+        "htmlReport": str(html_report),
+        "junitReport": str(junit_report),
     }
+
+
+def _normalize_reason(raw_reason: str | None, raw_text: str | None) -> str:
+    reason = (raw_reason or "").strip()
+    if reason:
+        return reason.splitlines()[0]
+    text = (raw_text or "").strip()
+    if not text:
+        return "-"
+    return text.splitlines()[0]
+
+
+def parse_junit_report(*, report_file: Path) -> list[dict[str, Any]]:
+    if not report_file.exists():
+        return []
+
+    root = ET.fromstring(report_file.read_text(encoding="utf-8"))
+    cases: list[dict[str, Any]] = []
+    for testcase in root.iter("testcase"):
+        class_name = testcase.attrib.get("classname", "")
+        test_name = testcase.attrib.get("name", "")
+        node_id = f"{class_name}::{test_name}" if class_name else test_name
+        status = "pass"
+        reason = "-"
+        detail = None
+        for fail_tag, fail_status in (("failure", "fail"), ("error", "error"), ("skipped", "skipped")):
+            node = testcase.find(fail_tag)
+            if node is not None:
+                status = fail_status
+                reason = _normalize_reason(node.attrib.get("message"), node.text)
+                detail = (node.text or "").strip()
+                break
+        cases.append(
+            {
+                "testCase": node_id,
+                "status": status,
+                "reason": reason,
+                "durationSeconds": float(testcase.attrib.get("time", "0")),
+                "details": detail,
+            }
+        )
+    return cases
+
+
+def _truncate(value: str, width: int) -> str:
+    if len(value) <= width:
+        return value
+    return value[: width - 3] + "..."
+
+
+def render_terminal_table(case_results: list[dict[str, Any]]) -> str:
+    headers = ("Test Case", "Status", "Reason")
+    widths = (60, 8, 80)
+    separator = f"+-{'-' * widths[0]}-+-{'-' * widths[1]}-+-{'-' * widths[2]}-+"
+    lines = [
+        separator,
+        f"| {headers[0]:<{widths[0]}} | {headers[1]:<{widths[1]}} | {headers[2]:<{widths[2]}} |",
+        separator,
+    ]
+    for result in case_results:
+        lines.append(
+            "| "
+            f"{_truncate(str(result['testCase']), widths[0]):<{widths[0]}} | "
+            f"{_truncate(str(result['status']), widths[1]):<{widths[1]}} | "
+            f"{_truncate(str(result['reason']), widths[2]):<{widths[2]}} |"
+        )
+    lines.append(separator)
+    return "\n".join(lines)
+
+
+def render_placeholder_html(summary: dict[str, Any]) -> str:
+    rows = "\n".join(
+        f"<tr><td>{case['testCase']}</td><td>{case['status']}</td><td>{case['reason']}</td></tr>"
+        for case in summary["caseResults"]
+    ) or "<tr><td colspan='3'>No test cases</td></tr>"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>RST Dashboard Report</title></head>
+<body>
+  <h1>RST Internal Dashboard</h1>
+  <p>Generated: {summary["generatedAt"]}</p>
+  <p>Status: {summary["run"]["status"]}</p>
+  <table border="1" cellspacing="0" cellpadding="6">
+    <thead><tr><th>Test Case</th><th>Status</th><th>Reason</th></tr></thead>
+    <tbody>{rows}</tbody>
+  </table>
+</body>
+</html>
+"""
 
 
 def build_summary(
     *,
     paths: DashboardPaths,
-    modules: Sequence[str],
     discovered_tests: dict[str, list[str]],
+    spec_mapping: list[dict[str, Any]],
     schema_summary: dict[str, Any],
     run_summary: dict[str, Any],
+    case_results: list[dict[str, Any]],
+    fips_summary: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "generatedAt": _now_iso(),
@@ -116,64 +257,15 @@ def build_summary(
         "testsRoot": str(paths.tests_root),
         "schemasRoot": str(paths.schemas_root),
         "reportsRoot": str(paths.reports_root),
-        "modules": list(modules),
+        "rstSpecVersion": SPEC_REFERENCE,
         "discoveredTests": discovered_tests,
         "testFileCount": sum(len(files) for files in discovered_tests.values()),
+        "specMapping": spec_mapping,
         "schemaInventory": schema_summary,
+        "fipsCheck": fips_summary,
+        "caseResults": case_results,
         "run": run_summary,
     }
-
-
-def render_html_report(summary: dict[str, Any]) -> str:
-    discovered_rows = "\n".join(
-        f"<tr><th>{html.escape(module)}</th><td>{len(files)}</td><td>{html.escape(', '.join(files) or '-')}</td></tr>"
-        for module, files in summary["discoveredTests"].items()
-    )
-    schema_inventory = summary["schemaInventory"]
-    run = summary["run"]
-    stdout = html.escape(run["stdout"].strip() or "-")
-    stderr = html.escape(run["stderr"].strip() or "-")
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>RST Dashboard Report</title>
-  <style>
-    body {{ font-family: Arial, sans-serif; margin: 2rem; }}
-    table {{ border-collapse: collapse; width: 100%; margin-bottom: 1.5rem; }}
-    th, td {{ border: 1px solid #d0d7de; padding: 0.5rem; text-align: left; vertical-align: top; }}
-    th {{ background: #f6f8fa; }}
-    pre {{ background: #f6f8fa; border: 1px solid #d0d7de; padding: 1rem; white-space: pre-wrap; }}
-  </style>
-</head>
-<body>
-  <h1>RST Internal Checker Dashboard</h1>
-  <p><strong>Generated:</strong> {html.escape(summary["generatedAt"])}</p>
-  <p><strong>Status:</strong> {html.escape(run["status"])}</p>
-  <h2>Discovered tests</h2>
-  <table>
-    <thead>
-      <tr><th>Module</th><th>Files</th><th>Paths</th></tr>
-    </thead>
-    <tbody>
-      {discovered_rows}
-    </tbody>
-  </table>
-  <h2>Schemas</h2>
-  <table>
-    <tbody>
-      <tr><th>JSON schemas</th><td>{schema_inventory["json_count"]}</td></tr>
-      <tr><th>XSD schemas</th><td>{schema_inventory["xsd_count"]}</td></tr>
-    </tbody>
-  </table>
-  <h2>Pytest output</h2>
-  <h3>stdout</h3>
-  <pre>{stdout}</pre>
-  <h3>stderr</h3>
-  <pre>{stderr}</pre>
-</body>
-</html>
-"""
 
 
 def write_report_files(
@@ -181,27 +273,23 @@ def write_report_files(
     summary: dict[str, Any],
     reports_root: Path,
     json_report: Path | None = None,
-    html_report: Path | None = None,
-) -> tuple[Path, Path]:
-    effective_json_report = json_report or reports_root / "rst-dashboard-report.json"
-    effective_html_report = html_report or reports_root / "rst-dashboard-report.html"
+) -> Path:
+    effective_json_report = json_report or reports_root / "report.json"
     effective_json_report.parent.mkdir(parents=True, exist_ok=True)
-    effective_html_report.parent.mkdir(parents=True, exist_ok=True)
     effective_json_report.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
-    effective_html_report.write_text(render_html_report(summary), encoding="utf-8")
-    return effective_json_report, effective_html_report
+    return effective_json_report
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run internal RST checks and write JSON/HTML summaries")
-    parser.add_argument("--module", action="append", choices=DEFAULT_MODULES, help="Limit execution to one or more modules")
+    parser = argparse.ArgumentParser(description="Run internal RST checks and write dashboard summaries")
+    parser.add_argument("--module", action="append", help="Limit execution to one or more module folders")
     parser.add_argument("--repo-root", type=Path, help="Repository root path")
     parser.add_argument("--tests-root", type=Path, help="Override tests root path")
     parser.add_argument("--schemas-root", type=Path, help="Override schemas root path")
     parser.add_argument("--reports-dir", type=Path, help="Override reports output directory")
     parser.add_argument("--json-report", type=Path, help="Optional JSON report file path")
     parser.add_argument("--html-report", type=Path, help="Optional HTML report file path")
-    parser.add_argument("--dry-run", action="store_true", help="Prepare the layout and reports without running pytest")
+    parser.add_argument("--dry-run", action="store_true", help="Prepare reports without running pytest")
     return parser
 
 
@@ -215,12 +303,18 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
         schemas_root=args.schemas_root.resolve() if args.schemas_root else base_paths.schemas_root,
         reports_root=args.reports_dir.resolve() if args.reports_dir else base_paths.reports_root,
     )
-    modules = tuple(args.module or DEFAULT_MODULES)
+    modules = tuple(args.module or ())
 
-    ensure_layout(paths, modules)
-    discovered_tests = discover_tests(tests_root=paths.tests_root, modules=modules)
+    ensure_layout(paths)
+    discovered_tests = discover_tests(tests_root=paths.tests_root, modules=modules or None)
+    spec_mapping = map_spec_criteria(tests_root=paths.tests_root, modules=modules or None)
     schema_summary = summarize_schemas(schemas_root=paths.schemas_root)
+    fips_summary = check_hsm_fips_140_3_mode()
+
     test_paths = [paths.tests_root / relative_path for files in discovered_tests.values() for relative_path in files]
+    html_report = args.html_report.resolve() if args.html_report else paths.reports_root / "report.html"
+    junit_report = paths.reports_root / "report-junit.xml"
+
     run_summary = (
         {
             "status": "not-run",
@@ -228,22 +322,37 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
             "command": [],
             "stdout": "Dry run: pytest execution skipped.",
             "stderr": "",
+            "htmlReport": str(html_report),
+            "junitReport": str(junit_report),
         }
         if args.dry_run
-        else run_pytest(repo_root=paths.repo_root, test_files=test_paths)
+        else run_pytest(
+            repo_root=paths.repo_root,
+            test_files=test_paths,
+            html_report=html_report,
+            junit_report=junit_report,
+        )
     )
+
+    case_results = [] if args.dry_run else parse_junit_report(report_file=junit_report)
+    if case_results:
+        print(render_terminal_table(case_results))
 
     summary = build_summary(
         paths=paths,
-        modules=modules,
         discovered_tests=discovered_tests,
+        spec_mapping=spec_mapping,
         schema_summary=schema_summary,
         run_summary=run_summary,
+        case_results=case_results,
+        fips_summary=fips_summary,
     )
     write_report_files(
         summary=summary,
         reports_root=paths.reports_root,
         json_report=args.json_report.resolve() if args.json_report else None,
-        html_report=args.html_report.resolve() if args.html_report else None,
     )
+    if args.dry_run and not html_report.exists():
+        html_report.parent.mkdir(parents=True, exist_ok=True)
+        html_report.write_text(render_placeholder_html(summary), encoding="utf-8")
     return int(run_summary["returncode"])

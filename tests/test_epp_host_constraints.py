@@ -112,3 +112,24 @@ def test_epp_client_requires_rsa_4096_mtls_keys(tmp_path: Path) -> None:
             key_algorithm="RSA",
             key_size_bits=2048,
         )
+
+
+def test_run_login_and_check_reports_pass_for_basic_commands(tmp_path: Path) -> None:
+    transport = _FakeTransport(responses=[EPP_SUCCESS_RESPONSE, EPP_SUCCESS_RESPONSE])
+    client = EppClient(config=_config(tmp_path), transport=transport, ssl_context=Mock(name="ssl_context"))
+
+    results = client.run_login_and_check(login_xml="<epp><command><login/></command></epp>", check_xml="<epp><command><check/></command></epp>")
+
+    assert [result.command_name for result in results] == ["login", "check"]
+    assert all(result.status == "pass" for result in results)
+
+
+def test_run_login_and_check_flags_narrow_glue_policy_violation(tmp_path: Path) -> None:
+    transport = _FakeTransport(responses=[EPP_SUCCESS_RESPONSE, EPP_POLICY_ERROR_RESPONSE])
+    client = EppClient(config=_config(tmp_path), transport=transport, ssl_context=Mock(name="ssl_context"))
+
+    results = client.run_login_and_check(login_xml="<epp><command><login/></command></epp>", check_xml="<epp><command><check/></command></epp>")
+
+    assert results[0].status == "pass"
+    assert results[1].status == "fail"
+    assert "Narrow Glue Policy" in results[1].reason

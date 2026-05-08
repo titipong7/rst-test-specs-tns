@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 import requests
+
+from rst_compliance.schema_validation import validate_json_payload
 
 
 class RegistryDataModel(str, Enum):
@@ -33,6 +37,8 @@ class RdapConformanceConfig:
     base_url: str
     registry_data_model: RegistryDataModel | str
     timeout_seconds: int = 30
+    schema_file: Path | None = None
+    latency_threshold_ms: int = 400
 
 
 class RdapConformanceClient:
@@ -41,17 +47,44 @@ class RdapConformanceClient:
     def __init__(self, config: RdapConformanceConfig, session: requests.Session | None = None) -> None:
         self.config = config
         self.session = session or requests.Session()
+        self.last_latency_ms: float | None = None
 
     def run_base_url_check(self) -> dict[str, Any]:
         endpoint = self.config.base_url.rstrip("/")
         headers = {"Accept": "application/rdap+json, application/json"}
+        start = perf_counter()
         response = self.session.get(endpoint, headers=headers, timeout=self.config.timeout_seconds)
+        self.last_latency_ms = (perf_counter() - start) * 1000
         response.raise_for_status()
 
         payload = response.json()
-        model = RegistryDataModel.parse(self.config.registry_data_model)
-        validate_rdap_payload(payload=payload, registry_data_model=model)
+        validate_rdap_response(
+            payload=payload,
+            registry_data_model=self.config.registry_data_model,
+            schema_file=self.config.schema_file,
+            latency_ms=self.last_latency_ms,
+            latency_threshold_ms=self.config.latency_threshold_ms,
+        )
         return payload
+
+
+def validate_rdap_response(
+    *,
+    payload: dict[str, Any],
+    registry_data_model: RegistryDataModel | str,
+    latency_ms: float,
+    schema_file: Path | None = None,
+    latency_threshold_ms: int = 400,
+) -> None:
+    if schema_file is not None:
+        validate_json_payload(schema_file=schema_file, payload=payload)
+
+    validate_rdap_payload(payload=payload, registry_data_model=registry_data_model)
+
+    if latency_ms > latency_threshold_ms:
+        raise RdapConformanceError(
+            f"RDAP latency {latency_ms:.2f}ms exceeds threshold {latency_threshold_ms}ms"
+        )
 
 
 def validate_rdap_payload(*, payload: dict[str, Any], registry_data_model: RegistryDataModel | str) -> None:
