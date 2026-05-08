@@ -12,7 +12,9 @@ dependencies = [
   "pytest-html==4.1.1",
   "requests==2.32.3",
   "jsonschema==4.23.0",
-  "xmlschema==3.4.5"
+  "xmlschema==3.4.5",
+  "pydantic==2.11.10",
+  "cryptography==48.0.0"
 ]
 
 [tool.setuptools]

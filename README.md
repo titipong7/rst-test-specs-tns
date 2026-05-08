@@ -55,12 +55,96 @@ tests for RST v2026.04 in:
 * `src/rst_compliance/` (RST API trigger client, schema validators, log model)
 * `tests/` (service trigger, schema validation, and log tests)
 * `schemas/rst-api-spec/v2026.4/` (location for official JSON/XML schemas)
+* `config.json` (environment configuration for Sandbox vs. Production)
 
 To run it:
 
 1. Create a virtual environment.
 2. Install the project in editable mode: `pip install -e .`
 3. Run tests: `pytest`
+
+### Module overview
+
+| Module | Purpose |
+|---|---|
+| `client.py` | RST API trigger client (Bearer auth, POST /v2/tests/trigger) |
+| `lifecycle.py` | RST v2.0 lifecycle state machine: Create → Submit → Poll → Retrieve |
+| `input_generator.py` | Pydantic-based input parameter generator for StandardPreDelegationTest and RSPEvaluation |
+| `epp_client.py` | EPP mTLS client (RSA-4096, TLS 1.3, Narrow Glue Policy checks) |
+| `rdap_conformance.py` | RDAP conformance checks (SLA < 400 ms, mandatory fields, registry data model) |
+| `dnssec_zone_health.py` | DNSSEC zone health checks (algorithm rollover, DS-to-DNSKEY, Zonemaster tag mapping) |
+| `tlsa_check.py` | TLSA/DANE record verification (RFC 6698, SHA-256/SHA-512, full-cert/SPKI selectors) |
+| `idn_lgr.py` | IDN label validation using LGR rules for .th/.ไทย (IDNA2008, Thai Unicode block) |
+| `rde_deposit_helper.py` | RDE-13 deposit validation (filename, registrar/NNDN uniqueness, ICANN manifest) |
+| `testcase_log.py` | TestCaseLog model and ERROR/CRITICAL tag extraction from ICANN API responses |
+| `fips_check.py` | FIPS 140-3 HSM mode probe (simulated PKCS#11) |
+| `rst_dashboard.py` | Pytest-HTML dashboard mapping results to ICANN test case IDs |
+| `schema_validation.py` | JSON Schema and XSD validation helpers |
+
+### Environment configuration (`config.json`)
+
+Switch between Sandbox (OT&E) and Production by editing `config.json`:
+
+```json
+{
+  "active_environment": "sandbox"
+}
+```
+
+Set credentials and endpoints in the corresponding environment block, or
+override individual fields via environment variables (e.g. `EPP_HOST`,
+`EPP_CERT`, `EPP_KEY`).
+
+### RST v2.0 lifecycle state machine
+
+Drive the full four-phase lifecycle programmatically:
+
+```python
+from rst_compliance.lifecycle import RstLifecycleClient
+from rst_compliance.config import RstApiConfig
+
+client = RstLifecycleClient(RstApiConfig(base_url="https://rst-ote.icann.org", auth_token="…"))
+lc, results = client.run_full_lifecycle(
+    test_plan="StandardPreDelegationTest",
+    tld="example",
+    service="DNS",
+    input_parameters={"dns.tld": "example", "dns.nameservers": ["ns1.example.test"]},
+)
+print(lc.state, lc.error_tags)
+```
+
+### Input Parameter Generator
+
+Generate well-formed RST API payloads from Pydantic models:
+
+```python
+from rst_compliance.input_generator import StandardPreDelegationTestInput, RdapBaseUrls
+
+spdt = StandardPreDelegationTestInput(
+    tld="example",
+    ns_hostnames=["ns1.example.test", "ns2.example.test"],
+    rdap_base_urls=RdapBaseUrls(domain="https://rdap.example.test/"),
+)
+payload = spdt.to_api_payload()
+```
+
+### TLSA/DANE verification
+
+Verify a certificate against TLSA DNS records (RFC 6698):
+
+```python
+from rst_compliance.tlsa_check import verify_tlsa_records
+
+results = verify_tlsa_records(pem_bytes, ["3 1 1 <sha256-hex>"])
+```
+
+### IDN/LGR validation for .th / .ไทย
+
+```python
+from rst_compliance.idn_lgr import validate_idn_domain
+
+results = validate_idn_domain("สวัสดี.ไทย", tld="th")
+```
 
 ### Internal checker workspace
 

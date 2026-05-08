@@ -1,0 +1,33 @@
+{
+  "environments": {
+    "sandbox": {
+      "base_url": "https://rst-ote.icann.org",
+      "auth_token": null,
+      "timeout_seconds": 60,
+      "tls_version": "TLSv1.3",
+      "rdap_latency_threshold_ms": 400,
+      "epp_host": null,
+      "epp_port": 700,
+      "epp_client_cert": null,
+      "epp_client_key": null,
+      "epp_ca_cert": null,
+      "registry_data_model": "minimum",
+      "allowed_tlds": []
+    },
+    "production": {
+      "base_url": "https://rst.icann.org",
+      "auth_token": null,
+      "timeout_seconds": 30,
+      "tls_version": "TLSv1.3",
+      "rdap_latency_threshold_ms": 400,
+      "epp_host": null,
+      "epp_port": 700,
+      "epp_client_cert": null,
+      "epp_client_key": null,
+      "epp_ca_cert": null,
+      "registry_data_model": "minimum",
+      "allowed_tlds": []
+    }
+  },
+  "active_environment": "sandbox"
+}
