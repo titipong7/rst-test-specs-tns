@@ -116,3 +116,43 @@ class EppClient:
     @classmethod
     def is_success(cls, response_xml: str) -> bool:
         return 1000 <= cls.result_code(response_xml) < 2000
+
+    def run_login_and_check(self, *, login_xml: str, check_xml: str) -> list["EppCommandCheckResult"]:
+        login_response = self.send_command(login_xml)
+        check_response = self.send_command(check_xml)
+        return [
+            assess_epp_command(command_name="login", response_xml=login_response),
+            assess_epp_command(command_name="check", response_xml=check_response),
+        ]
+
+
+@dataclass(frozen=True)
+class EppCommandCheckResult:
+    command_name: str
+    response_code: int
+    status: str
+    reason: str
+
+
+def assess_epp_command(*, command_name: str, response_xml: str) -> EppCommandCheckResult:
+    code = EppClient.result_code(response_xml)
+    if 1000 <= code < 2000:
+        return EppCommandCheckResult(
+            command_name=command_name,
+            response_code=code,
+            status="pass",
+            reason=f"{command_name} command accepted",
+        )
+    if code == 2306:
+        return EppCommandCheckResult(
+            command_name=command_name,
+            response_code=code,
+            status="fail",
+            reason=f"{command_name} command rejected by Narrow Glue Policy",
+        )
+    return EppCommandCheckResult(
+        command_name=command_name,
+        response_code=code,
+        status="fail",
+        reason=f"{command_name} command failed with EPP result code {code}",
+    )

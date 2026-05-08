@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema.exceptions import ValidationError
 
 from rst_compliance.rdap_conformance import (
     RdapConformanceClient,
     RdapConformanceConfig,
     RdapConformanceError,
+    validate_rdap_response,
     validate_rdap_payload,
 )
 
@@ -70,8 +74,52 @@ def test_rdap_base_url_check_calls_base_url_and_validates_payload(base_rdap_payl
     response_payload = client.run_base_url_check()
 
     assert response_payload == base_rdap_payload
+    assert client.last_latency_ms is not None
     assert session.last_call["url"] == "https://rdap.example.test"
     assert "application/rdap+json" in session.last_call["headers"]["Accept"]
+
+
+def test_validate_rdap_response_validates_with_jsonschema(base_rdap_payload: dict[str, Any], tmp_path: Path) -> None:
+    schema_file = tmp_path / "rdap.schema.json"
+    schema_file.write_text(
+        json.dumps(
+            {
+                "type": "object",
+                "required": ["rdapConformance", "links", "status", "notices", "entities"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    validate_rdap_response(
+        payload=base_rdap_payload,
+        registry_data_model="maximum",
+        schema_file=schema_file,
+        latency_ms=200,
+    )
+
+
+def test_validate_rdap_response_fails_on_schema_error(base_rdap_payload: dict[str, Any], tmp_path: Path) -> None:
+    schema_file = tmp_path / "rdap.schema.json"
+    schema_file.write_text(json.dumps({"type": "object", "required": ["events"]}), encoding="utf-8")
+
+    with pytest.raises(ValidationError):
+        validate_rdap_response(
+            payload=base_rdap_payload,
+            registry_data_model="maximum",
+            schema_file=schema_file,
+            latency_ms=200,
+        )
+
+
+def test_validate_rdap_response_fails_when_latency_exceeds_threshold(base_rdap_payload: dict[str, Any]) -> None:
+    with pytest.raises(RdapConformanceError, match="latency"):
+        validate_rdap_response(
+            payload=base_rdap_payload,
+            registry_data_model="maximum",
+            latency_ms=401,
+            latency_threshold_ms=400,
+        )
 
 
 def test_validate_rdap_payload_requires_mandatory_fields(base_rdap_payload: dict[str, Any]) -> None:
