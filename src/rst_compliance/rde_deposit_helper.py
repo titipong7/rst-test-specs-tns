@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_DEPOSIT_FILENAME_PATTERN = re.compile(
-    r"^(?P<tld>[a-z0-9-]+)_(?P<deposit_date>\d{4}-\d{2}-\d{2})_full_S(?P<sequence>\d+)_R(?P<revision>\d+)\.ryde$"
+    r"^(?P<tld>[a-z0-9-]+)_(?P<deposit_date>\d{4}-\d{2}-\d{2})_(?P<deposit_type>full)_S(?P<sequence>\d+)_R(?P<revision>\d+)\.ryde$"
 )
 
 
@@ -55,7 +55,7 @@ def validate_deposit_filename(
     if not match:
         return {
             "is_valid": False,
-            "reason": "filename does not satisfy v2026.4 x-constraints",
+            "reason": "filename does not satisfy v2026.4 naming constraints",
             "parsed": None,
         }
 
