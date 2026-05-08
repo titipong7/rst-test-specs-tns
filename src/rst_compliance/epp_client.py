@@ -138,6 +138,7 @@ class EppClient:
         )
 
     def send_command(self, xml_command: str) -> str:
+        """Backward-compatible alias for send_epp_command()."""
         return self.send_epp_command(xml_command)
 
     @staticmethod
