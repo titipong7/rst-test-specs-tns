@@ -62,6 +62,16 @@ To run it:
 2. Install the project in editable mode: `pip install -e .`
 3. Run tests: `pytest`
 
+### DNSSEC zone health helper script
+
+For RST v2026.04 DNSSEC checks aligned with Zonemaster v2025.2.1, use:
+
+`python -m rst_compliance.dnssec_zone_health --parent-ds-file <file> --child-dnskey-file <file> --zonemaster-output <file>`
+
+The script validates DNSSEC algorithm rollover readiness (RSA/SHA-256 and
+ECDSA P-256), checks DS-to-DNSKEY alignment, and maps parsed Zonemaster tags to
+RST DNSSEC error codes.
+
 ## Releasing a new version
 
 1. Make the changes you want to make.
