@@ -62,6 +62,23 @@ To run it:
 2. Install the project in editable mode: `pip install -e .`
 3. Run tests: `pytest`
 
+### Internal checker workspace
+
+An `internal-rst-checker/` workspace is included for keeping module-specific
+checks together:
+
+* `internal-rst-checker/tests/epp/`
+* `internal-rst-checker/tests/rdap/`
+* `internal-rst-checker/tests/dns/`
+* `internal-rst-checker/schemas/json/` and `internal-rst-checker/schemas/xml/`
+* `internal-rst-checker/reports/`
+* `internal-rst-checker/rst_dashboard.py`
+
+Run the dashboard to prepare the layout, execute the grouped tests, and write
+JSON/HTML summaries into `internal-rst-checker/reports/`:
+
+`python internal-rst-checker/rst_dashboard.py`
+
 ### DNSSEC zone health helper script
 
 For RST v2026.04 DNSSEC checks aligned with Zonemaster v2025.2.1, use:
