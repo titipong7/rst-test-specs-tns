@@ -68,7 +68,7 @@ def validate_deposit_filename(
             "parsed": parsed,
         }
 
-    if parsed.get("deposit_type", effective_constraints.required_deposit_type) != effective_constraints.required_deposit_type:
+    if parsed.get("deposit_type", "") != effective_constraints.required_deposit_type:
         return {
             "is_valid": False,
             "reason": "deposit type must be full",
