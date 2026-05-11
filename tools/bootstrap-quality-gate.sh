@@ -47,6 +47,14 @@ if ! command -v cpanm >/dev/null 2>&1; then
   }
 fi
 
+if ! command -v dot >/dev/null 2>&1; then
+  echo "graphviz (dot) not found. Attempting automatic install..."
+  install_pkg graphviz graphviz graphviz || {
+    echo "error: failed to install graphviz automatically"
+    exit 1
+  }
+fi
+
 if ! perl -MICANN::RST::Spec -e 1 >/dev/null 2>&1; then
   echo "Installing Perl modules for lint..."
   cpanm --quiet --notest --local-lib-contained "${HOME}/perl5" \
