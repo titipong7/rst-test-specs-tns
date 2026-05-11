@@ -1,6 +1,8 @@
 # Internal RST checker schemas
 
-Copy the official ICANN schema files into this folder:
+Bootstrap the official ICANN schema files into this folder:
+
+`make bootstrap-internal-checker-schemas`
 
 - `json/` for `.json` schema files
 - `xml/` for `.xsd` schema files

@@ -7,6 +7,8 @@ yaml: export ZM_VERSION=$(ZONEMASTER_VERSION)
 
 all: zonemaster-profile rdapct-config includes yaml lint json html
 
+.PHONY: bootstrap-internal-checker-schemas bootstrap-quality-gate quality-gate quality-gate-python
+
 zonemaster-profile:
 	@echo Generating Zonemaster profile...
 	@tools/generate-zonemaster-profile.pl "--version=$(ZONEMASTER_ENGINE_VERSION)" > rst.json
@@ -52,8 +54,21 @@ yaml:
 
 lint:
 	@echo Checking YAML...
-	@perl tools/lint.pl $(SRC).yaml
+	@PATH="$(HOME)/.local/bin:$(PATH)" perl tools/lint.pl $(SRC).yaml
 	@perl tools/lint-epp-extensions-list.pl
+
+bootstrap-internal-checker-schemas:
+	@python3 tools/bootstrap_internal_checker_schemas.py
+
+bootstrap-quality-gate:
+	@tools/bootstrap-quality-gate.sh
+
+quality-gate-python:
+	@echo Running Python compliance test gate...
+	@pytest -q tests
+
+quality-gate: lint quality-gate-python
+	@echo Quality gate passed (lint + python tests)
 
 json:
 	@echo Compiling JSON...

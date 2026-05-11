@@ -1,0 +1,32 @@
+---
+description: Enforce multi-agent auto development workflow
+globs:
+alwaysApply: true
+---
+
+# Auto Development Workflow Rule
+
+## Execution Order
+
+1. Planner generates and confirms implementation plan.
+2. Builder applies only approved scope.
+3. Tester validates acceptance criteria.
+4. Reviewer reports blockers and risk.
+5. Human approves before merge.
+
+## Builder Constraints
+
+- Do not modify files outside planned scope without explicit approval.
+- Keep changes small, traceable, and testable.
+- For any logic change, add or update tests.
+
+## Test Discipline
+
+- Run targeted tests for touched areas first.
+- Run broader suite before completion when feasible.
+- Record commands and outcomes in the final report.
+
+## PR Discipline
+
+- PR must include summary, test plan, and risk section.
+- If blockers exist from reviewer, PR is not merge-ready.

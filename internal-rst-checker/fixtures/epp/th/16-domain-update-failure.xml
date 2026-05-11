@@ -1,0 +1,10 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <update>
+      <domain:update xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>bad domain</domain:name>
+      </domain:update>
+    </update>
+    <clTRID>th-epp-16-update-fail</clTRID>
+  </command>
+</epp>

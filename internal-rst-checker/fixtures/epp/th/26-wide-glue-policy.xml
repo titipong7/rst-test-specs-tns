@@ -1,0 +1,11 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <create>
+      <host:create xmlns:host="urn:ietf:params:xml:ns:host-1.0">
+        <host:name>ns1.other-client.example.th</host:name>
+        <host:addr ip="v4">192.0.2.44</host:addr>
+      </host:create>
+    </create>
+    <clTRID>th-epp-26-wide-glue</clTRID>
+  </command>
+</epp>
