@@ -86,12 +86,12 @@ if [ "${need_perl_modules}" -eq 1 ]; then
     echo "Installing native prerequisites for Zonemaster::LDNS..."
     if [ "$(id -u)" -eq 0 ]; then
       apt-get update
-      apt-get install -y build-essential pkg-config libldns-dev
+      apt-get install -y build-essential pkg-config libldns-dev libidn2-dev libssl-dev
     elif command -v sudo >/dev/null 2>&1; then
       sudo apt-get update
-      sudo apt-get install -y build-essential pkg-config libldns-dev
+      sudo apt-get install -y build-essential pkg-config libldns-dev libidn2-dev libssl-dev
     else
-      echo "warning: sudo not available; skipping apt prerequisites install; please run as root: apt-get update && apt-get install -y build-essential pkg-config libldns-dev"
+      echo "warning: sudo not available; skipping apt prerequisites install; please run as root: apt-get update && apt-get install -y build-essential pkg-config libldns-dev libidn2-dev libssl-dev"
     fi
   fi
 
