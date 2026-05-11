@@ -14,5 +14,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.venv/
+.DS_Store
 internal-rst-checker/reports/*
 !internal-rst-checker/reports/.gitkeep
