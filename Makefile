@@ -67,7 +67,7 @@ quality-gate-python:
 	@echo Running Python compliance test gate...
 	@pytest -q tests
 
-quality-gate: lint quality-gate-python
+quality-gate: includes yaml lint quality-gate-python
 	@echo Quality gate passed (lint + python tests)
 
 json:
