@@ -1,4 +1,5 @@
 include .env
+export ZONEMASTER_VERSION ZONEMASTER_ENGINE_VERSION
 
 SRC = rst-test-specs
 ZM_DIR=zonemaster/zonemaster-$(ZONEMASTER_VERSION)
@@ -68,7 +69,7 @@ quality-gate-python:
 	@pytest -q tests
 
 quality-gate: includes yaml lint quality-gate-python
-	@echo Quality gate passed (lint + python tests)
+	@echo "Quality gate passed (lint + python tests)"
 
 json:
 	@echo Compiling JSON...
