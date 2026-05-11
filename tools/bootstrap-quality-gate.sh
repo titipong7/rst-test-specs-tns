@@ -34,6 +34,15 @@ install_pkg() {
   return 1
 }
 
+check_zonemaster_engine_version() {
+  perl -Mversion -MZonemaster::Engine -e '
+    exit(
+      version->parse($Zonemaster::Engine::VERSION) ==
+      version->parse($ENV{ZONEMASTER_ENGINE_VERSION}) ? 0 : 1
+    )
+  ' >/dev/null 2>&1
+}
+
 if ! command -v perl >/dev/null 2>&1; then
   echo "error: perl is required"
   exit 1
@@ -56,7 +65,7 @@ if ! command -v dot >/dev/null 2>&1; then
 fi
 
 if [ -z "${ZONEMASTER_ENGINE_VERSION:-}" ]; then
-  echo "error: ZONEMASTER_ENGINE_VERSION is required"
+  echo "error: ZONEMASTER_ENGINE_VERSION environment variable must be set"
   exit 1
 fi
 
@@ -66,7 +75,7 @@ if ! perl -MICANN::RST::Spec -e 1 >/dev/null 2>&1; then
   need_perl_modules=1
 fi
 
-if ! perl -Mversion -MZonemaster::Engine -e 'exit(version->parse($Zonemaster::Engine::VERSION) == version->parse($ENV{ZONEMASTER_ENGINE_VERSION}) ? 0 : 1)' >/dev/null 2>&1; then
+if ! check_zonemaster_engine_version; then
   need_perl_modules=1
 fi
 
