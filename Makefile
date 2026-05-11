@@ -1,4 +1,5 @@
 include .env
+export ZONEMASTER_VERSION ZONEMASTER_ENGINE_VERSION
 
 SRC = rst-test-specs
 ZM_DIR=zonemaster/zonemaster-$(ZONEMASTER_VERSION)
