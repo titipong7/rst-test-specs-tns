@@ -69,7 +69,7 @@ quality-gate-python:
 	@pytest -q tests
 
 quality-gate: includes yaml lint quality-gate-python
-	@echo Quality gate passed (lint + python tests)
+	@echo "Quality gate passed (lint + python tests)"
 
 json:
 	@echo Compiling JSON...
