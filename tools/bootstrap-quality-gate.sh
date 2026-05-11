@@ -91,7 +91,7 @@ if [ "${need_perl_modules}" -eq 1 ]; then
       sudo apt-get update
       sudo apt-get install -y build-essential pkg-config libldns-dev
     else
-      echo "warning: sudo not available; skipping apt prerequisites install; Zonemaster::LDNS installation may fail"
+      echo "warning: sudo not available; skipping apt prerequisites install; please manually install: build-essential pkg-config libldns-dev"
     fi
   fi
 
