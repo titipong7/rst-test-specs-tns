@@ -37,8 +37,8 @@ install_pkg() {
 check_zonemaster_engine_version() {
   perl -Mversion -MZonemaster::Engine -e '
     exit(
-      version->parse($Zonemaster::Engine::VERSION) ==
-      version->parse($ENV{ZONEMASTER_ENGINE_VERSION}) ? 0 : 1
+      version->parse($Zonemaster::Engine::VERSION) <=>
+      version->parse($ENV{ZONEMASTER_ENGINE_VERSION})
     )
   ' >/dev/null 2>&1
 }
