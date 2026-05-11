@@ -55,12 +55,28 @@ if ! command -v dot >/dev/null 2>&1; then
   }
 fi
 
+if [ -z "${ZONEMASTER_ENGINE_VERSION:-}" ]; then
+  echo "error: ZONEMASTER_ENGINE_VERSION is required"
+  exit 1
+fi
+
+need_perl_modules=0
+
 if ! perl -MICANN::RST::Spec -e 1 >/dev/null 2>&1; then
-  echo "Installing Perl modules for lint..."
+  need_perl_modules=1
+fi
+
+if ! perl -Mversion -MZonemaster::Engine -e 'exit(version->parse($Zonemaster::Engine::VERSION) == version->parse($ENV{ZONEMASTER_ENGINE_VERSION}) ? 0 : 1)' >/dev/null 2>&1; then
+  need_perl_modules=1
+fi
+
+if [ "${need_perl_modules}" -eq 1 ]; then
+  echo "Installing Perl modules for lint and Zonemaster generation..."
   cpanm --quiet --notest --local-lib-contained "${HOME}/perl5" \
-    ICANN::RST JSON::Schema Array::Utils Data::Mirror
+    ICANN::RST JSON::Schema Array::Utils Data::Mirror \
+    Zonemaster::LDNS "Zonemaster::Engine@${ZONEMASTER_ENGINE_VERSION}"
 else
-  echo "Perl lint modules already installed"
+  echo "Perl lint and Zonemaster modules already installed"
 fi
 
 if ! command -v go >/dev/null 2>&1; then

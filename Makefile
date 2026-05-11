@@ -61,7 +61,7 @@ bootstrap-internal-checker-schemas:
 	@python3 tools/bootstrap_internal_checker_schemas.py
 
 bootstrap-quality-gate:
-	@tools/bootstrap-quality-gate.sh
+	@ZONEMASTER_ENGINE_VERSION="$(ZONEMASTER_ENGINE_VERSION)" tools/bootstrap-quality-gate.sh
 
 quality-gate-python:
 	@echo Running Python compliance test gate...
