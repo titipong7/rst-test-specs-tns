@@ -38,7 +38,7 @@ check_zonemaster_engine_version() {
   perl -Mversion -MZonemaster::Engine -e '
     exit(
       version->parse($Zonemaster::Engine::VERSION) <=>
-      version->parse($ENV{ZONEMASTER_ENGINE_VERSION})
+      version->parse($ENV{ZONEMASTER_ENGINE_VERSION}) ? 1 : 0
     )
   ' >/dev/null 2>&1
 }
