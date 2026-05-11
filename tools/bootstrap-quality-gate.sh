@@ -66,6 +66,14 @@ if ! command -v dot >/dev/null 2>&1; then
   }
 fi
 
+if ! command -v gpp >/dev/null 2>&1; then
+  echo "gpp not found. Attempting automatic install..."
+  install_pkg gpp gpp gpp || {
+    echo "error: failed to install gpp automatically"
+    exit 1
+  }
+fi
+
 if [ -z "${ZONEMASTER_ENGINE_VERSION:-}" ]; then
   echo "error: ZONEMASTER_ENGINE_VERSION environment variable must be set"
   exit 1
@@ -98,6 +106,7 @@ if [ "${need_perl_modules}" -eq 1 ]; then
   echo "Installing Perl modules for lint and Zonemaster generation..."
   cpanm --quiet --notest --local-lib-contained "${HOME}/perl5" \
     ICANN::RST JSON::Schema Array::Utils Data::Mirror \
+    Spreadsheet::XLSX LWP::Protocol::https DateTime::Format::ISO8601 \
     Zonemaster::LDNS "Zonemaster::Engine@${ZONEMASTER_ENGINE_VERSION}"
 else
   echo "Perl lint and Zonemaster modules already installed"
