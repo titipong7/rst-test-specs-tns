@@ -18,6 +18,7 @@ This repository uses a staged gate model before merge.
 ## Unified Gate Command
 
 Use `make quality-gate` to run Gate 1 and Gate 2 in sequence.
+The target now prepares generated YAML inputs (`includes` + `yaml`) before linting.
 
 ## Bootstrap Dependencies (Dev/CI)
 

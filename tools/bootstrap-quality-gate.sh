@@ -34,6 +34,17 @@ install_pkg() {
   return 1
 }
 
+check_zonemaster_engine_version() {
+  perl -Mversion -MZonemaster::Engine -e '
+    exit(
+      (
+        version->parse($Zonemaster::Engine::VERSION) <=>
+        version->parse($ENV{ZONEMASTER_ENGINE_VERSION})
+      ) == 0 ? 0 : 1
+    )
+  ' >/dev/null 2>&1
+}
+
 if ! command -v perl >/dev/null 2>&1; then
   echo "error: perl is required"
   exit 1
@@ -55,12 +66,50 @@ if ! command -v dot >/dev/null 2>&1; then
   }
 fi
 
+if ! command -v gpp >/dev/null 2>&1; then
+  echo "gpp not found. Attempting automatic install..."
+  install_pkg gpp gpp gpp || {
+    echo "error: failed to install gpp automatically"
+    exit 1
+  }
+fi
+
+if [ -z "${ZONEMASTER_ENGINE_VERSION:-}" ]; then
+  echo "error: ZONEMASTER_ENGINE_VERSION environment variable must be set"
+  exit 1
+fi
+
+need_perl_modules=0
+
 if ! perl -MICANN::RST::Spec -e 1 >/dev/null 2>&1; then
-  echo "Installing Perl modules for lint..."
+  need_perl_modules=1
+fi
+
+if ! check_zonemaster_engine_version; then
+  need_perl_modules=1
+fi
+
+if [ "${need_perl_modules}" -eq 1 ]; then
+  if command -v apt-get >/dev/null 2>&1; then
+    echo "Installing native prerequisites for Zonemaster::LDNS..."
+    if [ "$(id -u)" -eq 0 ]; then
+      apt-get update
+      apt-get install -y build-essential pkg-config libldns-dev libidn2-dev libssl-dev
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo apt-get update
+      sudo apt-get install -y build-essential pkg-config libldns-dev libidn2-dev libssl-dev
+    else
+      echo "warning: sudo not available; skipping apt prerequisites install; please run as root: apt-get update && apt-get install -y build-essential pkg-config libldns-dev libidn2-dev libssl-dev"
+    fi
+  fi
+
+  echo "Installing Perl modules for lint and Zonemaster generation..."
   cpanm --quiet --notest --local-lib-contained "${HOME}/perl5" \
-    ICANN::RST JSON::Schema Array::Utils Data::Mirror
+    ICANN::RST JSON::Schema Array::Utils Data::Mirror \
+    Spreadsheet::XLSX LWP::Protocol::https DateTime::Format::ISO8601 \
+    Zonemaster::LDNS "Zonemaster::Engine@${ZONEMASTER_ENGINE_VERSION}"
 else
-  echo "Perl lint modules already installed"
+  echo "Perl lint and Zonemaster modules already installed"
 fi
 
 if ! command -v go >/dev/null 2>&1; then
