@@ -98,6 +98,7 @@ if [ "${need_perl_modules}" -eq 1 ]; then
   echo "Installing Perl modules for lint and Zonemaster generation..."
   cpanm --quiet --notest --local-lib-contained "${HOME}/perl5" \
     ICANN::RST JSON::Schema Array::Utils Data::Mirror \
+    Spreadsheet::XLSX LWP::Protocol::https \
     Zonemaster::LDNS "Zonemaster::Engine@${ZONEMASTER_ENGINE_VERSION}"
 else
   echo "Perl lint and Zonemaster modules already installed"
