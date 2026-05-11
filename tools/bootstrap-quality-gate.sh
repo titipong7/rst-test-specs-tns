@@ -66,6 +66,14 @@ if ! command -v dot >/dev/null 2>&1; then
   }
 fi
 
+if ! command -v gpp >/dev/null 2>&1; then
+  echo "gpp not found. Attempting automatic install..."
+  install_pkg gpp gpp gpp || {
+    echo "error: failed to install gpp automatically"
+    exit 1
+  }
+fi
+
 if [ -z "${ZONEMASTER_ENGINE_VERSION:-}" ]; then
   echo "error: ZONEMASTER_ENGINE_VERSION environment variable must be set"
   exit 1
