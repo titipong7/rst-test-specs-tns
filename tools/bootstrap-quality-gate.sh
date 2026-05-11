@@ -82,6 +82,19 @@ if ! check_zonemaster_engine_version; then
 fi
 
 if [ "${need_perl_modules}" -eq 1 ]; then
+  if command -v apt-get >/dev/null 2>&1; then
+    echo "Installing native prerequisites for Zonemaster::LDNS..."
+    if [ "$(id -u)" -eq 0 ]; then
+      apt-get update
+      apt-get install -y build-essential pkg-config libldns-dev
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo apt-get update
+      sudo apt-get install -y build-essential pkg-config libldns-dev
+    else
+      echo "warning: sudo not available; skipping apt prerequisites install"
+    fi
+  fi
+
   echo "Installing Perl modules for lint and Zonemaster generation..."
   cpanm --quiet --notest --local-lib-contained "${HOME}/perl5" \
     ICANN::RST JSON::Schema Array::Utils Data::Mirror \
