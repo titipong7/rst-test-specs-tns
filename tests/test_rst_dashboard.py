@@ -12,6 +12,8 @@ from rst_compliance.rst_dashboard import (
     map_spec_criteria,
     parse_junit_report,
     render_terminal_table,
+    summarize_epp_suite_coverage,
+    summarize_etc_requirement_coverage,
     summarize_schemas,
 )
 
@@ -103,25 +105,88 @@ def test_build_summary_counts_discovered_files(tmp_path: Path) -> None:
         discovered_tests={"tests": ["test_alpha.py", "test_beta.py"]},
         spec_mapping=[{"testName": "test_alpha", "criteriaIds": []}],
         schema_summary={"json_count": 1, "xsd_count": 2, "json_files": ["json/a.json"], "xsd_files": ["xml/a.xsd"]},
+        etc_requirement_coverage={"requirements": [], "summary": {"covered": 0, "partial": 0, "missing": 2}},
+        epp_suite_coverage={"matrix": [], "summary": {"covered": 0, "partial": 0, "missing": 27}},
         run_summary={"status": "passed", "returncode": 0, "command": ["pytest"], "stdout": ".", "stderr": ""},
         case_results=[{"testCase": "tests::test_alpha", "status": "pass", "reason": "-", "durationSeconds": 0.1, "details": None}],
         fips_summary={"status": "pass", "standard": "FIPS 140-3", "reason": "ok", "details": {}},
+        epp01_connectivity={"mode": "not-run", "status": "not-run"},
     )
 
     assert summary["testFileCount"] == 2
     assert summary["run"]["status"] == "passed"
     assert summary["fipsCheck"]["standard"] == "FIPS 140-3"
+    assert "etcRequirementCoverage" in summary
+    assert "eppSuiteCoverage" in summary
+    assert summary["epp01Connectivity"]["mode"] == "not-run"
+
+
+def test_summarize_etc_requirement_coverage_reports_covered_and_partial() -> None:
+    coverage = summarize_etc_requirement_coverage(
+        spec_mapping=[
+            {
+                "testName": "test_index_contains_required_release_and_resource_links",
+                "file": "etc/test_etc_site_files.py",
+                "module": "etc",
+                "rstSpecVersion": "ICANN RST v2026.04",
+                "criteriaIds": [],
+            },
+            {
+                "testName": "test_redirect_page_replaces_location_with_release_and_hash",
+                "file": "etc/test_etc_site_files.py",
+                "module": "etc",
+                "rstSpecVersion": "ICANN RST v2026.04",
+                "criteriaIds": [],
+            },
+        ],
+        case_results=[
+            {"testCase": "tests.etc.test_etc_site_files::test_index_contains_required_release_and_resource_links", "status": "pass"},
+            {"testCase": "tests.etc.test_etc_site_files::test_redirect_page_replaces_location_with_release_and_hash", "status": "fail"},
+        ],
+    )
+    statuses = {item["id"]: item["status"] for item in coverage["requirements"]}
+    assert statuses["etc-index-links"] == "covered"
+    assert statuses["etc-redirect-hash"] == "partial"
+
+
+def test_summarize_epp_suite_coverage_reports_covered_partial_and_missing() -> None:
+    coverage = summarize_epp_suite_coverage(
+        spec_mapping=[
+            {
+                "testName": "test_epp_service_connectivity_smoke_epp_01",
+                "file": "epp/test_epp_standard_suite_smoke.py",
+                "module": "epp",
+                "rstSpecVersion": "ICANN RST v2026.04",
+                "criteriaIds": ["epp-01"],
+            },
+            {
+                "testName": "test_epp_domain_update_smoke_epp_16",
+                "file": "epp/test_epp_standard_suite_smoke.py",
+                "module": "epp",
+                "rstSpecVersion": "ICANN RST v2026.04",
+                "criteriaIds": ["epp-16"],
+            },
+        ],
+        case_results=[
+            {"testCase": "internal-rst-checker.tests.epp::test_epp_service_connectivity_smoke_epp_01", "status": "pass"},
+            {"testCase": "internal-rst-checker.tests.epp::test_epp_domain_update_smoke_epp_16", "status": "fail"},
+        ],
+    )
+    matrix = {item["caseId"]: item["status"] for item in coverage["matrix"]}
+    assert matrix["epp-01"] == "covered"
+    assert matrix["epp-16"] == "partial"
+    assert matrix["epp-05"] == "missing"
 
 
 def test_dashboard_main_dry_run_writes_reports(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     project_root = repo_root / "internal-rst-checker"
-    tests_root = repo_root / "tests"
+    tests_root = project_root / "tests"
     schemas_root = repo_root / "schemas"
     tests_root.mkdir(parents=True)
     schemas_root.mkdir(parents=True)
     (tests_root / "test_one.py").write_text("def test_one():\n    pass\n", encoding="utf-8")
-    project_root.mkdir(parents=True)
+    project_root.mkdir(parents=True, exist_ok=True)
 
     exit_code = main(["--repo-root", str(repo_root), "--dry-run"], project_root=project_root)
 
@@ -133,3 +198,4 @@ def test_dashboard_main_dry_run_writes_reports(tmp_path: Path) -> None:
 
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report["run"]["status"] == "not-run"
+    assert report["epp01Connectivity"]["mode"] == "not-run"

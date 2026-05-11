@@ -1,0 +1,15 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <create>
+      <domain:create xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>new-example.th</domain:name>
+        <domain:period unit="y">1</domain:period>
+        <domain:registrant>THNIC-REG-001</domain:registrant>
+        <domain:authInfo>
+          <domain:pw>AUTH-CODE</domain:pw>
+        </domain:authInfo>
+      </domain:create>
+    </create>
+    <clTRID>th-epp-14-create-ok</clTRID>
+  </command>
+</epp>

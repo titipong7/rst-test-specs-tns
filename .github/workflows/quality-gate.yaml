@@ -1,0 +1,57 @@
+name: quality-gate
+
+on:
+  pull_request:
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: restore cpan cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cpanm
+            ~/perl5
+          key: ${{ runner.os }}-cpan-${{ hashFiles('tools/bootstrap-quality-gate.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-cpan-
+
+      - name: install python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: install bootstrap toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpanminus
+
+      - name: export perl local lib paths
+        run: |
+          echo "PERL5LIB=$HOME/perl5/lib/perl5:$HOME/perl5/lib/perl5/$(perl -MConfig -e 'print $Config{archname}')" >> "$GITHUB_ENV"
+          echo "PATH=$HOME/perl5/bin:$HOME/.local/bin:$PATH" >> "$GITHUB_ENV"
+
+      - name: bootstrap quality-gate dependencies
+        run: make bootstrap-quality-gate
+
+      - name: run quality gate
+        run: make quality-gate

@@ -67,6 +67,11 @@ class RdapConformanceClient:
         )
         return payload
 
+    def run_head_check(self, *, object_path: str) -> None:
+        endpoint = f"{self.config.base_url.rstrip('/')}/{object_path.lstrip('/')}"
+        response = self.session.head(endpoint, headers={"Accept": "application/rdap+json, application/json"}, timeout=self.config.timeout_seconds)
+        validate_rdap_head_response(response=response)
+
 
 def validate_rdap_response(
     *,
@@ -129,6 +134,20 @@ def validate_rdap_payload(*, payload: dict[str, Any], registry_data_model: Regis
         raise RdapConformanceError(
             "maximum registry data model requires at least one registrant entity"
         )
+
+
+def validate_rdap_head_response(*, response: Any) -> None:
+    status_code = int(getattr(response, "status_code", 0))
+    if status_code != 200:
+        raise RdapConformanceError(f"HEAD request must return 200, got {status_code}")
+
+    headers = getattr(response, "headers", {}) or {}
+    if "access-control-allow-origin" not in {str(key).lower() for key in headers}:
+        raise RdapConformanceError("HEAD response missing access-control-allow-origin header")
+
+    body = getattr(response, "text", "")
+    if body and str(body).strip():
+        raise RdapConformanceError("HEAD response body must be empty")
 
 
 def _has_registrant_entity(entities: list[dict[str, Any]]) -> bool:

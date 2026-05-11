@@ -1,0 +1,15 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <update>
+      <domain:update xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>example.th</domain:name>
+        <domain:chg>
+          <domain:authInfo>
+            <domain:pw>NEW-AUTH-CODE</domain:pw>
+          </domain:authInfo>
+        </domain:chg>
+      </domain:update>
+    </update>
+    <clTRID>th-epp-16-update-ok</clTRID>
+  </command>
+</epp>

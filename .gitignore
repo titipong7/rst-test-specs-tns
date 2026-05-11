@@ -14,5 +14,10 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.venv/
+.DS_Store
 internal-rst-checker/reports/*
 !internal-rst-checker/reports/.gitkeep
+internal-rst-checker/fixtures/epp/th/th.env
+internal-rst-checker/fixtures/**/*.env
+!internal-rst-checker/fixtures/**/*.env.example

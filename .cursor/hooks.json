@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/quality-gate-reminder.sh",
+        "matcher": "^git commit",
+        "failClosed": false
+      }
+    ]
+  }
+}

@@ -13,10 +13,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
+from rst_compliance.epp_connectivity import Epp01ProbeConfig, run_epp01_connectivity_probe
 from rst_compliance.fips_check import check_hsm_fips_140_3_mode
 
 SPEC_REFERENCE = "ICANN RST v2026.04"
 CASE_ID_PATTERN = re.compile(r"\b(?:dns|rdap|epp|rde)-\d+\b", re.IGNORECASE)
+ETC_REQUIREMENTS = (
+    {
+        "id": "etc-index-links",
+        "title": "etc/index.md exposes release and resource links",
+        "file": "etc/index.md",
+        "expected_tests": ("test_index_contains_required_release_and_resource_links",),
+    },
+    {
+        "id": "etc-redirect-hash",
+        "title": "etc/test-spec-redirect.html preserves location hash on redirect",
+        "file": "etc/test-spec-redirect.html",
+        "expected_tests": ("test_redirect_page_replaces_location_with_release_and_hash",),
+    },
+)
+EPP_CASE_IDS = tuple(f"epp-{case_id:02d}" for case_id in range(1, 28))
 
 
 @dataclass(frozen=True)
@@ -38,7 +54,7 @@ def resolve_paths(*, project_root: Path | None = None, repo_root: Path | None = 
     return DashboardPaths(
         repo_root=effective_repo_root,
         project_root=effective_project_root,
-        tests_root=effective_repo_root / "tests",
+        tests_root=effective_project_root / "tests",
         schemas_root=effective_repo_root / "schemas",
         reports_root=effective_project_root / "reports",
     )
@@ -100,6 +116,156 @@ def summarize_schemas(*, schemas_root: Path) -> dict[str, Any]:
         "json_files": json_files,
         "xsd_files": xsd_files,
     }
+
+
+def summarize_etc_requirement_coverage(
+    *,
+    spec_mapping: list[dict[str, Any]],
+    case_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    case_status_by_name: dict[str, list[str]] = {}
+    for result in case_results:
+        node_id = str(result.get("testCase", ""))
+        if "::" not in node_id:
+            continue
+        test_name = node_id.rsplit("::", 1)[-1]
+        case_status_by_name.setdefault(test_name, []).append(str(result.get("status", "")).lower())
+
+    requirements: list[dict[str, str]] = []
+    for requirement in ETC_REQUIREMENTS:
+        expected_tests = set(requirement["expected_tests"])
+        matched_tests = {
+            entry["testName"]
+            for entry in spec_mapping
+            if entry.get("module") == "etc" and entry.get("testName") in expected_tests
+        }
+        if not matched_tests:
+            status = "missing"
+            reason = "No etc smoke test is mapped for this requirement."
+        elif not case_results:
+            status = "partial"
+            reason = "Test exists but execution was skipped (dry-run or no junit results)."
+        else:
+            statuses = [
+                state
+                for name in matched_tests
+                for key, values in case_status_by_name.items()
+                if key == name or key.startswith(f"{name}[")
+                for state in values
+            ]
+            if not statuses:
+                status = "partial"
+                reason = "Test is mapped but no execution result was found in junit output."
+            elif all(state == "pass" for state in statuses):
+                status = "covered"
+                reason = "Mapped etc smoke tests passed."
+            else:
+                status = "partial"
+                reason = "At least one mapped etc smoke test did not pass."
+
+        requirements.append(
+            {
+                "id": str(requirement["id"]),
+                "title": str(requirement["title"]),
+                "file": str(requirement["file"]),
+                "status": status,
+                "reason": reason,
+            }
+        )
+
+    status_totals = {"covered": 0, "partial": 0, "missing": 0}
+    for item in requirements:
+        status_totals[item["status"]] = status_totals.get(item["status"], 0) + 1
+
+    return {
+        "requirements": requirements,
+        "summary": status_totals,
+    }
+
+
+def summarize_epp_suite_coverage(
+    *,
+    spec_mapping: list[dict[str, Any]],
+    case_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    case_status_by_name: dict[str, list[str]] = {}
+    for result in case_results:
+        node_id = str(result.get("testCase", ""))
+        if "::" not in node_id:
+            continue
+        test_name = node_id.rsplit("::", 1)[-1]
+        case_status_by_name.setdefault(test_name, []).append(str(result.get("status", "")).lower())
+
+    matrix: list[dict[str, Any]] = []
+    for case_id in EPP_CASE_IDS:
+        matched_tests = [
+            entry
+            for entry in spec_mapping
+            if entry.get("module") == "epp" and case_id in entry.get("criteriaIds", [])
+        ]
+        if case_id == "epp-22":
+            matrix.append(
+                {
+                    "caseId": case_id,
+                    "status": "partial",
+                    "reason": "Removed from v2026.04 StandardEPP but kept in matrix for continuity.",
+                    "tests": [],
+                }
+            )
+            continue
+        if not matched_tests:
+            matrix.append(
+                {
+                    "caseId": case_id,
+                    "status": "missing",
+                    "reason": "No mapped internal checker test.",
+                    "tests": [],
+                }
+            )
+            continue
+
+        mapped_names = [str(item["testName"]) for item in matched_tests]
+        if not case_results:
+            matrix.append(
+                {
+                    "caseId": case_id,
+                    "status": "partial",
+                    "reason": "Mapped test exists but no execution results were provided.",
+                    "tests": mapped_names,
+                }
+            )
+            continue
+
+        statuses = [
+            state
+            for name in mapped_names
+            for key, values in case_status_by_name.items()
+            if key == name or key.startswith(f"{name}[")
+            for state in values
+        ]
+        if statuses and "pass" in statuses and all(state in {"pass", "skipped"} for state in statuses):
+            status = "covered"
+            reason = "Mapped tests passed (with optional variants skipped where not applicable)."
+        elif statuses:
+            status = "partial"
+            reason = "Mapped tests exist but at least one did not pass."
+        else:
+            status = "partial"
+            reason = "Mapped tests not present in junit results."
+
+        matrix.append(
+            {
+                "caseId": case_id,
+                "status": status,
+                "reason": reason,
+                "tests": mapped_names,
+            }
+        )
+
+    summary = {"covered": 0, "partial": 0, "missing": 0}
+    for item in matrix:
+        summary[item["status"]] = summary.get(item["status"], 0) + 1
+    return {"matrix": matrix, "summary": summary}
 
 
 def run_pytest(*, repo_root: Path, test_files: Sequence[Path], html_report: Path, junit_report: Path) -> dict[str, Any]:
@@ -246,9 +412,12 @@ def build_summary(
     discovered_tests: dict[str, list[str]],
     spec_mapping: list[dict[str, Any]],
     schema_summary: dict[str, Any],
+    etc_requirement_coverage: dict[str, Any],
+    epp_suite_coverage: dict[str, Any],
     run_summary: dict[str, Any],
     case_results: list[dict[str, Any]],
     fips_summary: dict[str, Any],
+    epp01_connectivity: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "generatedAt": _now_iso(),
@@ -262,6 +431,9 @@ def build_summary(
         "testFileCount": sum(len(files) for files in discovered_tests.values()),
         "specMapping": spec_mapping,
         "schemaInventory": schema_summary,
+        "etcRequirementCoverage": etc_requirement_coverage,
+        "eppSuiteCoverage": epp_suite_coverage,
+        "epp01Connectivity": epp01_connectivity,
         "fipsCheck": fips_summary,
         "caseResults": case_results,
         "run": run_summary,
@@ -290,6 +462,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json-report", type=Path, help="Optional JSON report file path")
     parser.add_argument("--html-report", type=Path, help="Optional HTML report file path")
     parser.add_argument("--dry-run", action="store_true", help="Prepare reports without running pytest")
+    parser.add_argument("--live-epp01", action="store_true", help="Run live connectivity checks for epp-01")
+    parser.add_argument("--epp-host", help="Override EPP host for epp-01 live checks")
+    parser.add_argument("--epp-port", type=int, default=700, help="Override EPP port for epp-01 live checks")
     return parser
 
 
@@ -337,15 +512,41 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
     case_results = [] if args.dry_run else parse_junit_report(report_file=junit_report)
     if case_results:
         print(render_terminal_table(case_results))
+    etc_requirement_coverage = summarize_etc_requirement_coverage(
+        spec_mapping=spec_mapping,
+        case_results=case_results,
+    )
+    epp_suite_coverage = summarize_epp_suite_coverage(
+        spec_mapping=spec_mapping,
+        case_results=case_results,
+    )
+    epp_host = args.epp_host or os.environ.get("EPP_HOST")
+    if args.live_epp01 and epp_host:
+        epp01_connectivity = run_epp01_connectivity_probe(
+            Epp01ProbeConfig(
+                host=epp_host,
+                port=args.epp_port,
+            )
+        ).to_dict()
+        epp01_connectivity["mode"] = "live"
+    else:
+        epp01_connectivity = {
+            "mode": "not-run",
+            "status": "not-run",
+            "reason": "Live epp-01 probe disabled or EPP host not provided.",
+        }
 
     summary = build_summary(
         paths=paths,
         discovered_tests=discovered_tests,
         spec_mapping=spec_mapping,
         schema_summary=schema_summary,
+        etc_requirement_coverage=etc_requirement_coverage,
+        epp_suite_coverage=epp_suite_coverage,
         run_summary=run_summary,
         case_results=case_results,
         fips_summary=fips_summary,
+        epp01_connectivity=epp01_connectivity,
     )
     write_report_files(
         summary=summary,
@@ -356,3 +557,7 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
         html_report.parent.mkdir(parents=True, exist_ok=True)
         html_report.write_text(render_placeholder_html(summary), encoding="utf-8")
     return int(run_summary["returncode"])
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

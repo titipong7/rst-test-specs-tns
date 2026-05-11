@@ -12,6 +12,16 @@ from typing import Any
 DEFAULT_DEPOSIT_FILENAME_PATTERN = re.compile(
     r"^(?P<tld>[a-z0-9-]+)_(?P<deposit_date>\d{4}-\d{2}-\d{2})_(?P<deposit_type>full)_S(?P<sequence>\d+)_R(?P<revision>\d+)\.ryde$"
 )
+ALLOWED_NNDN_NAME_STATES = {"blocked", "withheld", "mirrored"}
+OBJECT_URI_SUFFIX_BY_OBJECT_TYPE = {
+    "domain": ":xml:ns:rdeDomain-1.0",
+    "registrar": ":xml:ns:rdeRegistrar-1.0",
+    "host": ":xml:ns:rdeHost-1.0",
+    "contact": ":xml:ns:rdeContact-1.0",
+    "idnTable": ":xml:ns:rdeIDN-1.0",
+    "nndn": ":xml:ns:rdeNNDN-1.0",
+    "eppParams": ":xml:ns:rdeEppParams-1.0",
+}
 
 
 @dataclass(frozen=True)
@@ -42,6 +52,72 @@ def _extract_nndn_names(root: ET.Element) -> list[str]:
         if value and value.strip():
             nndn_names.append(value.strip())
     return nndn_names
+
+
+def _extract_domain_names(root: ET.Element) -> list[str]:
+    domain_names: list[str] = []
+    for domain in root.findall(".//{*}domain"):
+        value = domain.findtext("{*}name")
+        if value and value.strip():
+            domain_names.append(value.strip())
+    return domain_names
+
+
+def _extract_nndn_name_states(root: ET.Element) -> list[str]:
+    name_states: list[str] = []
+    for nndn in root.findall(".//{*}nndn"):
+        value = nndn.findtext("{*}nameState")
+        if value and value.strip():
+            name_states.append(value.strip().lower())
+    return name_states
+
+
+def _local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def _find_elements_by_local_name(root: ET.Element, local_name: str) -> list[ET.Element]:
+    return [element for element in root.iter() if _local_name(element.tag) == local_name]
+
+
+def _extract_menu_obj_uris(root: ET.Element) -> list[str]:
+    values: list[str] = []
+    for element in _find_elements_by_local_name(root, "objURI"):
+        text = element.text or ""
+        if text.strip():
+            values.append(text.strip())
+    return values
+
+
+def _extract_header_uri_counts(root: ET.Element) -> dict[str, int]:
+    uri_counts: dict[str, int] = {}
+    for count_element in _find_elements_by_local_name(root, "count"):
+        uri = (count_element.attrib.get("uri") or "").strip()
+        if not uri:
+            continue
+        text = (count_element.text or "").strip()
+        try:
+            uri_counts[uri] = int(text)
+        except ValueError:
+            uri_counts[uri] = -1
+    return uri_counts
+
+
+def _extract_object_counts(root: ET.Element) -> dict[str, int]:
+    return {
+        "domain": len(_find_elements_by_local_name(root, "domain")),
+        "registrar": len(_find_elements_by_local_name(root, "registrar")),
+        "host": len(_find_elements_by_local_name(root, "host")),
+        "contact": len(_find_elements_by_local_name(root, "contact")),
+        "idnTable": len(_find_elements_by_local_name(root, "idnTable")),
+        "nndn": len(_find_elements_by_local_name(root, "nndn")),
+        "eppParams": len(_find_elements_by_local_name(root, "eppParams")),
+    }
+
+
+def _uri_matches_object_type(uri: str, object_type: str) -> bool:
+    suffix = OBJECT_URI_SUFFIX_BY_OBJECT_TYPE[object_type]
+    return uri.endswith(suffix)
 
 
 def validate_deposit_filename(
@@ -102,9 +178,20 @@ def validate_rde_deposit_xml(
 
     registrar_ids = _extract_registrar_ids(root)
     nndn_names = _extract_nndn_names(root)
+    domain_names = _extract_domain_names(root)
+    nndn_name_states = _extract_nndn_name_states(root)
 
     duplicate_registrar_ids = _duplicates(registrar_ids)
     duplicate_nndn_names = _duplicates(nndn_names)
+    conflicting_nndn_names = sorted(set(nndn_names) & set(domain_names))
+    invalid_nndn_name_states = sorted(
+        {state for state in nndn_name_states if state not in ALLOWED_NNDN_NAME_STATES}
+    )
+    menu_obj_uris = _extract_menu_obj_uris(root)
+    header_uri_counts = _extract_header_uri_counts(root)
+    object_counts = _extract_object_counts(root)
+    header_uri_set = set(header_uri_counts)
+    menu_uri_set = set(menu_obj_uris)
 
     errors: list[str] = []
     if not filename_validation["is_valid"]:
@@ -113,10 +200,52 @@ def validate_rde_deposit_xml(
         errors.append("RDE_REGISTRAR_HAS_NON_UNIQUE_ID")
     if duplicate_nndn_names:
         errors.append("RDE_NNDN_HAS_NON_UNIQUE_NAME")
+    if conflicting_nndn_names:
+        errors.append("RDE_NNDN_CONFLICTS_WITH_DOMAIN")
+    if menu_uri_set and header_uri_set and menu_uri_set != header_uri_set:
+        errors.append("RDE_MENU_AND_HEADER_URIS_DIFFER")
+
+    for object_type, count in object_counts.items():
+        has_uri = any(
+            _uri_matches_object_type(uri, object_type) for uri in (menu_uri_set | header_uri_set)
+        )
+        if count > 0 and not has_uri:
+            if object_type == "idnTable":
+                errors.append("RDE_IDN_OBJECT_UNEXPECTED")
+            else:
+                errors.append("RDE_UNEXPECTED_OBJECT")
+
+    # rde-05/06 basic URI and count checks from header/menu declarations.
+    for uri, expected_count in header_uri_counts.items():
+        matched_type = next(
+            (object_type for object_type in OBJECT_URI_SUFFIX_BY_OBJECT_TYPE if _uri_matches_object_type(uri, object_type)),
+            None,
+        )
+        if matched_type is None:
+            errors.append("RDE_UNEXPECTED_OBJECT_URI")
+            continue
+        actual_count = object_counts.get(matched_type, 0)
+        if expected_count < 0 or expected_count != actual_count:
+            errors.append("RDE_OBJECT_COUNT_MISMATCH")
+        if actual_count == 0:
+            if matched_type == "domain":
+                errors.append("RDE_DOMAIN_OBJECT_MISSING")
+            elif matched_type == "host":
+                errors.append("RDE_HOST_OBJECT_MISSING")
+            elif matched_type == "contact":
+                errors.append("RDE_CONTACT_OBJECT_MISSING")
+            elif matched_type == "idnTable":
+                errors.append("RDE_IDN_OBJECT_MISSING")
+
+    for object_type, count in object_counts.items():
+        if count == 0:
+            continue
+        if not any(_uri_matches_object_type(uri, object_type) for uri in menu_uri_set):
+            errors.append("RDE_MISSING_OBJECT_URI")
 
     return {
         "is_valid": not errors,
-        "errors": errors,
+        "errors": sorted(set(errors)),
         "details": {
             "filename": filename_validation,
             "registrar_ids": {
@@ -126,7 +255,15 @@ def validate_rde_deposit_xml(
             "nndn_names": {
                 "total": len(nndn_names),
                 "duplicates": duplicate_nndn_names,
+                "conflicts_with_domains": conflicting_nndn_names,
             },
+            "nndn_name_states": {
+                "total": len(nndn_name_states),
+                "invalid": invalid_nndn_name_states,
+            },
+            "menu_obj_uris": sorted(menu_uri_set),
+            "header_uri_counts": header_uri_counts,
+            "object_counts": object_counts,
         },
     }
 

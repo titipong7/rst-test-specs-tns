@@ -1,0 +1,29 @@
+---
+description: Review severity framework and merge gate
+globs:
+alwaysApply: true
+---
+
+# Review Severity Gate
+
+## Severity Definitions
+
+- `blocker`: incorrect behavior, data loss risk, security flaw, or broken build.
+- `high`: likely regression or unmet acceptance criteria.
+- `medium`: maintainability risk with near-term impact.
+- `low`: minor improvements or clarity updates.
+
+## Merge Gate
+
+- Any `blocker` or `high` finding must be fixed before merge.
+- `medium` findings require explicit defer rationale in PR.
+- `low` findings can be backlog items.
+
+## Review Output Format
+
+Review results must include:
+
+1. Finding title
+2. Severity
+3. Evidence (file and behavior)
+4. Required action

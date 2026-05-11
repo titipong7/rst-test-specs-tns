@@ -1,0 +1,10 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <check>
+      <domain:check xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>example.th</domain:name>
+      </domain:check>
+    </check>
+    <clTRID>th-epp-04-check-ok</clTRID>
+  </command>
+</epp>

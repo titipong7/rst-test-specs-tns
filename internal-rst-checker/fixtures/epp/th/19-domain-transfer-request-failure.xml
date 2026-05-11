@@ -1,0 +1,13 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <transfer op="request">
+      <domain:transfer xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>example.th</domain:name>
+        <domain:authInfo>
+          <domain:pw>WRONG-CODE</domain:pw>
+        </domain:authInfo>
+      </domain:transfer>
+    </transfer>
+    <clTRID>th-epp-19-transfer-fail</clTRID>
+  </command>
+</epp>

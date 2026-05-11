@@ -1,0 +1,16 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <login>
+      <clID>THNIC-20001</clID>
+      <pw>WRONG-PASSWORD</pw>
+      <options>
+        <version>1.0</version>
+        <lang>en</lang>
+      </options>
+      <svcs>
+        <objURI>urn:ietf:params:xml:ns:domain-1.0</objURI>
+      </svcs>
+    </login>
+    <clTRID>th-epp-03-login-fail</clTRID>
+  </command>
+</epp>

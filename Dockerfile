@@ -7,6 +7,7 @@ RUN apk update
 # packages as possible
 #
 RUN apk add --quiet \
+    bzip2 \
     curl \
     gcc \
     git \
@@ -74,15 +75,16 @@ RUN apk add --quiet \
     perl-spreadsheet-xlsx
 
 #
-# we have to compile this the old-fashioned way!
+# gpp is not available as an Alpine package; build from source.
 #
-RUN <<END
-wget -qO - https://github.com/logological/gpp/releases/download/2.28/gpp-2.28.tar.bz2 | tar xj
-cd gpp-2.28
-./configure --quiet
-make install
-rm -rf ../gpp-2.28
-END
+RUN set -eux; \
+    curl -fsSL "https://github.com/logological/gpp/releases/download/2.28/gpp-2.28.tar.bz2" | tar -xj; \
+    cd gpp-2.28; \
+    ./configure --quiet; \
+    make -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)" install; \
+    cd /; \
+    rm -rf /gpp-2.28; \
+    command -v gpp
 
 #
 # this is a required build argument and sets the version of Zonemaster::Engine

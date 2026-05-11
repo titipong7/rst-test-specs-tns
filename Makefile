@@ -1,4 +1,5 @@
 include .env
+export ZONEMASTER_VERSION ZONEMASTER_ENGINE_VERSION
 
 SRC = rst-test-specs
 ZM_DIR=zonemaster/zonemaster-$(ZONEMASTER_VERSION)
@@ -6,6 +7,8 @@ ZM_DIR=zonemaster/zonemaster-$(ZONEMASTER_VERSION)
 yaml: export ZM_VERSION=$(ZONEMASTER_VERSION)
 
 all: zonemaster-profile rdapct-config includes yaml lint json html
+
+.PHONY: bootstrap-internal-checker-schemas bootstrap-quality-gate quality-gate quality-gate-python
 
 zonemaster-profile:
 	@echo Generating Zonemaster profile...
@@ -52,8 +55,21 @@ yaml:
 
 lint:
 	@echo Checking YAML...
-	@perl tools/lint.pl $(SRC).yaml
+	@PATH="$(HOME)/.local/bin:$(PATH)" perl tools/lint.pl $(SRC).yaml
 	@perl tools/lint-epp-extensions-list.pl
+
+bootstrap-internal-checker-schemas:
+	@python3 tools/bootstrap_internal_checker_schemas.py
+
+bootstrap-quality-gate:
+	@ZONEMASTER_ENGINE_VERSION="$(ZONEMASTER_ENGINE_VERSION)" tools/bootstrap-quality-gate.sh
+
+quality-gate-python:
+	@echo Running Python compliance test gate...
+	@pytest -q tests
+
+quality-gate: includes yaml lint quality-gate-python
+	@echo "Quality gate passed (lint + python tests)"
 
 json:
 	@echo Compiling JSON...

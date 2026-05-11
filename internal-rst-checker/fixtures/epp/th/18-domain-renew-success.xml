@@ -1,0 +1,12 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <renew>
+      <domain:renew xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>example.th</domain:name>
+        <domain:curExpDate>2026-12-01</domain:curExpDate>
+        <domain:period unit="y">1</domain:period>
+      </domain:renew>
+    </renew>
+    <clTRID>th-epp-18-renew-ok</clTRID>
+  </command>
+</epp>
