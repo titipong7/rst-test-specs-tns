@@ -53,6 +53,15 @@ regenerates two artefacts under `internal-rst-checker/reports/`:
 CLI knobs: `--suite <name>` (repeatable), `--skip-fixtures`,
 `--skip-errors`, `--dashboard-html <PATH>`, `--no-dashboard`.
 
+## Combined Python sweep (`make test-all`)
+
+`make test-all` runs `pytest internal-rst-checker/tests tests` in a single
+invocation. The project-wide `import-mode = importlib` setting in
+`pyproject.toml` ensures basename collisions (e.g. `test_dnssec_zone_health.py`
+exists in both roots) no longer fire `import file mismatch` collection
+errors. A regression test (`tests/test_combined_pytest_invocation.py`) keeps
+the combined invocation green. See review finding Info-1.
+
 ## Merge Criteria
 
 Changes are merge-ready only when:
