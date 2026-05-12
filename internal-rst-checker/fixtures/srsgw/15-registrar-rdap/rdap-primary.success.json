@@ -1,0 +1,7 @@
+{
+  "rdapConformance": ["rdap_level_0"],
+  "objectClassName": "entity",
+  "handle": "9995",
+  "roles": ["registrar"],
+  "publicIds": [{"type": "IANA Registrar ID", "identifier": "9995"}]
+}

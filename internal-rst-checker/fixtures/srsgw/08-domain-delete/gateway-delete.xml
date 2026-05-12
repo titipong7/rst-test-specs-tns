@@ -1,0 +1,10 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <delete>
+      <domain:delete xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>srsgw04.example.example</domain:name>
+      </domain:delete>
+    </delete>
+    <clTRID>srsgw-08-domain-delete</clTRID>
+  </command>
+</epp>

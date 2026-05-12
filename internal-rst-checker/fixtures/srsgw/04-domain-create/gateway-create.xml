@@ -1,0 +1,15 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <create>
+      <domain:create xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>srsgw04.example.example</domain:name>
+        <domain:period unit="y">1</domain:period>
+        <domain:registrant>srsgw-03-contact</domain:registrant>
+        <domain:authInfo>
+          <domain:pw>AUTH-CODE</domain:pw>
+        </domain:authInfo>
+      </domain:create>
+    </create>
+    <clTRID>srsgw-04-domain-create</clTRID>
+  </command>
+</epp>

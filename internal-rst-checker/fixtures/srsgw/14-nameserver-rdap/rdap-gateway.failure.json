@@ -1,0 +1,9 @@
+{
+  "rdapConformance": ["rdap_level_0"],
+  "objectClassName": "nameserver",
+  "ldhName": "ns-srsgw-02.example.example",
+  "status": ["clientDeleteProhibited"],
+  "ipAddresses": {
+    "v4": ["192.0.2.99"]
+  }
+}

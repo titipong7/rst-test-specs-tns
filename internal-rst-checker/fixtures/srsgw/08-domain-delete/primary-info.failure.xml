@@ -1,0 +1,11 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <response>
+    <result code="1000"><msg>Command completed successfully</msg></result>
+    <resData>
+      <domain:infData xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>srsgw04.example.example</domain:name>
+        <domain:status s="ok"/>
+      </domain:infData>
+    </resData>
+  </response>
+</epp>

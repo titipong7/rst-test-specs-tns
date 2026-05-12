@@ -1,0 +1,9 @@
+{
+  "rdapConformance": ["rdap_level_0"],
+  "objectClassName": "domain",
+  "ldhName": "srsgw04.example.example",
+  "status": ["pendingDelete"],
+  "events": [
+    {"eventAction": "registration", "eventDate": "2025-01-01T00:00:00Z"}
+  ]
+}
