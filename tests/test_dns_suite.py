@@ -34,11 +34,24 @@ from rst_compliance.dns_suite import (
     DnsSyntax06Checker,
     DnsTestResult,
     DnsZone10Checker,
+    Dnssec01Checker,
+    Dnssec02Checker,
+    Dnssec03Checker,
+    Dnssec05Checker,
+    Dnssec08Checker,
+    Dnssec10Checker,
+    Dnssec13Checker,
     Dnssec91Checker,
     Dnssec92Checker,
     Dnssec93Checker,
+    DnssecOps01ZskRolloverChecker,
+    DnssecOps02KskRolloverChecker,
+    DnssecOps03AlgorithmRolloverChecker,
+    DnssecOpsConfig,
+    DnssecOperationsTestSuite,
     StandardDnsTestSuite,
     StandardDnssecTestSuite,
+    ZoneTransferClient,
 )
 
 
@@ -501,11 +514,266 @@ class TestStandardDnsTestSuite:
 
 
 class TestStandardDnssecTestSuite:
-    def test_runs_all_3_dnssec_custom_cases(self, base_config: DnsSuiteConfig) -> None:
+    def test_runs_all_14_dnssec_cases(self, base_config: DnsSuiteConfig) -> None:
         suite = StandardDnssecTestSuite(base_config)
+        results = suite.run_all()
+        assert len(results) == 14
+        test_ids = {r.test_id for r in results}
+        for tid in ["dnssec-01", "dnssec-02", "dnssec-03", "dnssec-04", "dnssec-05",
+                     "dnssec-06", "dnssec-08", "dnssec-09", "dnssec-10",
+                     "dnssec-13", "dnssec-14", "dnssec-91", "dnssec-92", "dnssec-93"]:
+            assert tid in test_ids, f"Missing {tid}"
+
+
+# ===================================================================
+# Zonemaster DNSSEC module tests
+# ===================================================================
+
+class TestDnssec01:
+    def test_ds_present_passes(self, base_config: DnsSuiteConfig) -> None:
+        result = Dnssec01Checker(base_config).run()
+        assert result.passed
+
+    def test_no_ds_fails(self) -> None:
+        config = DnsSuiteConfig(
+            nameservers=[{"name": "example", "nameservers": [{"name": "ns1.example.com", "v4Addrs": ["93.184.216.34"]}]}],
+            ds_records=[],
+        )
+        result = Dnssec01Checker(config).run()
+        assert not result.passed
+        assert any(e.code == "ZM_DS01_DS_ALGO_2_MISSING" for e in result.errors)
+
+
+class TestDnssec02:
+    def test_sep_key_present_passes(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier(dnskey_answer=[
+            {"type": "DNSKEY", "algorithm": 13, "flags": 257, "keyTag": 12345},
+        ])
+        result = Dnssec02Checker(base_config, querier=querier).run()
+        assert result.passed
+
+    def test_no_sep_key_fails(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier(dnskey_answer=[
+            {"type": "DNSKEY", "algorithm": 13, "flags": 256},
+        ])
+        result = Dnssec02Checker(base_config, querier=querier).run()
+        assert not result.passed
+        assert any(e.code == "ZM_DS02_DNSKEY_NOT_SEP" for e in result.errors)
+
+
+class TestDnssec03:
+    def test_dnskey_present_passes(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier()
+        result = Dnssec03Checker(base_config, querier=querier).run()
+        assert result.passed
+
+    def test_no_dnskey_fails(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier(dnskey_answer=[])
+        result = Dnssec03Checker(base_config, querier=querier).run()
+        assert not result.passed
+        assert any(e.code == "ZM_DS03_NO_DNSSEC_SUPPORT" for e in result.errors)
+
+
+class TestDnssec05:
+    def test_algorithm_13_passes(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier(dnskey_answer=[{"type": "DNSKEY", "algorithm": 13}])
+        result = Dnssec05Checker(base_config, querier=querier).run()
+        assert result.passed
+
+    def test_unknown_algorithm_fails(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier(dnskey_answer=[{"type": "DNSKEY", "algorithm": 99}])
+        result = Dnssec05Checker(base_config, querier=querier).run()
+        assert not result.passed
+        assert any(e.code == "ZM_ALGORITHM_NOT_RECOMMENDED" for e in result.errors)
+
+
+class TestDnssec08:
+    def test_rrsig_present_passes(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier(dnskey_answer=[
+            {"type": "DNSKEY", "algorithm": 13},
+            {"type": "RRSIG", "algorithm": 13},
+        ])
+        result = Dnssec08Checker(base_config, querier=querier).run()
+        assert result.passed
+
+    def test_no_rrsig_fails(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier(dnskey_answer=[
+            {"type": "DNSKEY", "algorithm": 13},
+        ])
+        result = Dnssec08Checker(base_config, querier=querier).run()
+        assert not result.passed
+        assert any(e.code == "ZM_DS02_NO_MATCHING_DNSKEY_RRSIG" for e in result.errors)
+
+
+class TestDnssec10:
+    def test_all_servers_have_dnssec(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier()
+        result = Dnssec10Checker(base_config, querier=querier).run()
+        assert result.passed
+
+    def test_server_no_dnssec_fails(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier(dnskey_answer=[])
+        result = Dnssec10Checker(base_config, querier=querier).run()
+        assert not result.passed
+        assert any(e.code == "ZM_DS05_SERVER_NO_DNSSEC" for e in result.errors)
+
+
+class TestDnssec13:
+    def test_all_algorithms_signed(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier(dnskey_answer=[
+            {"type": "DNSKEY", "algorithm": 13},
+            {"type": "RRSIG", "algorithm": 13},
+        ])
+        result = Dnssec13Checker(base_config, querier=querier).run()
+        assert result.passed
+
+    def test_unsigned_algorithm_fails(self, base_config: DnsSuiteConfig) -> None:
+        querier = StubQuerier(dnskey_answer=[
+            {"type": "DNSKEY", "algorithm": 13},
+            {"type": "DNSKEY", "algorithm": 8},
+            {"type": "RRSIG", "algorithm": 13},
+        ])
+        result = Dnssec13Checker(base_config, querier=querier).run()
+        assert not result.passed
+        assert any(e.code == "ZM_DS13_ALGO_NOT_SIGNED_DNSKEY" for e in result.errors)
+
+
+# ===================================================================
+# DNSSEC Operations suite tests
+# ===================================================================
+
+@pytest.fixture
+def ops_config() -> DnssecOpsConfig:
+    return DnssecOpsConfig(
+        nameservers=[{"name": "ns1.example.com", "v4Addrs": ["93.184.216.34"]}],
+        primary_servers={"v4Addrs": ["93.184.216.34"]},
+        tsig_key={"name": "rst-tsig", "algorithm": "hmac-sha256", "secret": "c2VjcmV0"},
+        csk=False,
+        zsk_rollover_zone="zsk.example.com",
+        ksk_rollover_zone="ksk.example.com",
+        algorithm_rollover_zone="alg.example.com",
+    )
+
+
+class StubXfrClient(ZoneTransferClient):
+    def __init__(self, result: dict[str, Any]) -> None:
+        self._result = result
+
+    def transfer(self, **kwargs: Any) -> dict[str, Any]:
+        return self._result
+
+
+class FailXfrClient(ZoneTransferClient):
+    def transfer(self, **kwargs: Any) -> dict[str, Any]:
+        raise ConnectionError("AXFR failed")
+
+
+class TestDnssecOps01ZskRollover:
+    def test_successful_rollover_passes(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": True, "rollover_completed": True, "chain_of_trust_broken": False})
+        result = DnssecOps01ZskRolloverChecker(ops_config, xfr_client=xfr).run()
+        assert result.passed
+
+    def test_skipped_when_csk(self, ops_config: DnssecOpsConfig) -> None:
+        config = DnssecOpsConfig(**{**ops_config.__dict__, "csk": True})
+        result = DnssecOps01ZskRolloverChecker(config).run()
+        assert result.skipped
+
+    def test_chain_of_trust_broken_fails(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": True, "chain_of_trust_broken": True, "rollover_completed": True})
+        result = DnssecOps01ZskRolloverChecker(ops_config, xfr_client=xfr).run()
+        assert not result.passed
+        assert any(e.code == "DNSSEC_OPS_ZSK_ROLLOVER_CHAIN_OF_TRUST_BROKEN" for e in result.errors)
+
+    def test_rollover_not_completed_fails(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": True, "rollover_completed": False, "chain_of_trust_broken": False})
+        result = DnssecOps01ZskRolloverChecker(ops_config, xfr_client=xfr).run()
+        assert not result.passed
+        assert any(e.code == "DNSSEC_OPS_ZSK_ROLLOVER_NOT_COMPLETED" for e in result.errors)
+
+    def test_invalid_zone_fails(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": False, "reason": "unsigned"})
+        result = DnssecOps01ZskRolloverChecker(ops_config, xfr_client=xfr).run()
+        assert not result.passed
+        assert any(e.code == "DNSSEC_OPS_ZONE_IS_INVALID" for e in result.errors)
+
+    def test_invalid_algorithm_fails(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": True, "rollover_completed": True, "new_algorithm": 5})
+        result = DnssecOps01ZskRolloverChecker(ops_config, xfr_client=xfr).run()
+        assert not result.passed
+        assert any(e.code == "DNSSEC_OPS_INVALID_ALGORITHM" for e in result.errors)
+
+    def test_xfr_failure_produces_error(self, ops_config: DnssecOpsConfig) -> None:
+        result = DnssecOps01ZskRolloverChecker(ops_config, xfr_client=FailXfrClient()).run()
+        assert not result.passed
+        assert any(e.code == "DNSSEC_OPS_XFR_FAILED_TOO_MANY_TIMES" for e in result.errors)
+
+    def test_no_zone_configured_fails(self) -> None:
+        config = DnssecOpsConfig(nameservers=[], primary_servers={"v4Addrs": ["1.2.3.4"]}, zsk_rollover_zone="")
+        result = DnssecOps01ZskRolloverChecker(config).run()
+        assert not result.passed
+
+    def test_dns_query_failure(self, ops_config: DnssecOpsConfig) -> None:
+        result = DnssecOps01ZskRolloverChecker(ops_config, querier=FailQuerier()).run()
+        assert not result.passed
+        assert any(e.code == "DNSSEC_OPS_DNS_QUERY_FAILED_TOO_MANY_TIMES" for e in result.errors)
+
+
+class TestDnssecOps02KskRollover:
+    def test_successful_rollover_passes(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": True, "rollover_completed": True, "chain_of_trust_broken": False})
+        result = DnssecOps02KskRolloverChecker(ops_config, xfr_client=xfr).run()
+        assert result.passed
+
+    def test_chain_broken_fails(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": True, "chain_of_trust_broken": True})
+        result = DnssecOps02KskRolloverChecker(ops_config, xfr_client=xfr).run()
+        assert not result.passed
+        assert any(e.code == "DNSSEC_OPS_KSK_ROLLOVER_CHAIN_OF_TRUST_BROKEN" for e in result.errors)
+
+    def test_not_completed_fails(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": True, "rollover_completed": False})
+        result = DnssecOps02KskRolloverChecker(ops_config, xfr_client=xfr).run()
+        assert not result.passed
+        assert any(e.code == "DNSSEC_OPS_KSK_ROLLOVER_NOT_COMPLETED" for e in result.errors)
+
+    def test_no_zone_configured_fails(self) -> None:
+        config = DnssecOpsConfig(nameservers=[], primary_servers={"v4Addrs": ["1.2.3.4"]}, ksk_rollover_zone="")
+        result = DnssecOps02KskRolloverChecker(config).run()
+        assert not result.passed
+
+
+class TestDnssecOps03AlgorithmRollover:
+    def test_successful_rollover_passes(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": True, "rollover_completed": True, "chain_of_trust_broken": False})
+        result = DnssecOps03AlgorithmRolloverChecker(ops_config, xfr_client=xfr).run()
+        assert result.passed
+
+    def test_chain_broken_fails(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": True, "chain_of_trust_broken": True})
+        result = DnssecOps03AlgorithmRolloverChecker(ops_config, xfr_client=xfr).run()
+        assert not result.passed
+        assert any(e.code == "DNSSEC_OPS_ALGORITHM_ROLLOVER_CHAIN_OF_TRUST_BROKEN" for e in result.errors)
+
+    def test_not_completed_fails(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": True, "rollover_completed": False})
+        result = DnssecOps03AlgorithmRolloverChecker(ops_config, xfr_client=xfr).run()
+        assert not result.passed
+        assert any(e.code == "DNSSEC_OPS_ALGORITHM_ROLLOVER_NOT_COMPLETED" for e in result.errors)
+
+    def test_no_zone_configured_fails(self) -> None:
+        config = DnssecOpsConfig(nameservers=[], primary_servers={"v4Addrs": ["1.2.3.4"]}, algorithm_rollover_zone="")
+        result = DnssecOps03AlgorithmRolloverChecker(config).run()
+        assert not result.passed
+
+
+class TestDnssecOperationsTestSuite:
+    def test_runs_all_3_ops_cases(self, ops_config: DnssecOpsConfig) -> None:
+        xfr = StubXfrClient({"valid": True, "rollover_completed": True, "chain_of_trust_broken": False})
+        suite = DnssecOperationsTestSuite(ops_config, xfr_client=xfr)
         results = suite.run_all()
         assert len(results) == 3
         test_ids = {r.test_id for r in results}
-        assert "dnssec-91" in test_ids
-        assert "dnssec-92" in test_ids
-        assert "dnssec-93" in test_ids
+        assert "dnssecOps01-ZSKRollover" in test_ids
+        assert "dnssecOps02-KSKRollover" in test_ids
+        assert "dnssecOps03-AlgorithmRollover" in test_ids
