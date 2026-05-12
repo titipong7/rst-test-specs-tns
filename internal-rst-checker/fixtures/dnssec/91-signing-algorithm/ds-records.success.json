@@ -1,0 +1,19 @@
+[
+  {
+    "name": "example",
+    "dsRecords": [
+      {
+        "keyTag": 12345,
+        "alg": 8,
+        "digestType": 2,
+        "digest": "E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D"
+      },
+      {
+        "keyTag": 23456,
+        "alg": 13,
+        "digestType": 2,
+        "digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      }
+    ]
+  }
+]

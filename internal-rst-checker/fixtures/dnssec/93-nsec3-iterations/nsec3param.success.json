@@ -1,0 +1,9 @@
+{
+  "name": "example",
+  "nsec3param": {
+    "hashAlgorithm": 1,
+    "flags": 0,
+    "iterations": 0,
+    "salt": "-"
+  }
+}
