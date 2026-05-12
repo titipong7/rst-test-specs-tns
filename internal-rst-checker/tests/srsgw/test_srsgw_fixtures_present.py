@@ -3,10 +3,17 @@
 Spec reference:
     https://icann.github.io/rst-test-specs/v2026.04/rst-test-specs.html#Test-Suite-SRSGW
     inc/srsgw/cases.yaml
+
+Mirrors the canonical template at
+``internal-rst-checker/tests/epp/test_epp_th_fixtures_present.py``. Note
+that ``srsgw-07`` was merged upstream into ``srsgw-06`` (see the spec
+comment in ``inc/srsgw/cases.yaml``) and is therefore absent from
+``ACTIVE_CASES``.
 """
 
 from __future__ import annotations
 
+import csv
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -16,28 +23,18 @@ import pytest
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "srsgw"
 
-# srsgw-07 was merged upstream into srsgw-06; see `inc/srsgw/cases.yaml`.
 ACTIVE_CASES: tuple[str, ...] = (
-    "01", "02", "03", "04", "05", "06",
-    "08", "09", "10", "11", "12",
-    "13", "14", "15",
+    "srsgw-01", "srsgw-02", "srsgw-03", "srsgw-04", "srsgw-05", "srsgw-06",
+    "srsgw-08", "srsgw-09", "srsgw-10", "srsgw-11", "srsgw-12",
+    "srsgw-13", "srsgw-14", "srsgw-15",
 )
 
-CASE_LABELS: dict[str, str] = {
-    "01": "srsgw-01 — connectivity",
-    "02": "srsgw-02 — host create",
-    "03": "srsgw-03 — contact create",
-    "04": "srsgw-04 — domain create",
-    "05": "srsgw-05 — domain renew",
-    "06": "srsgw-06 — domain transfer (req + approve)",
-    "08": "srsgw-08 — domain delete",
-    "09": "srsgw-09 — host update",
-    "10": "srsgw-10 — host delete",
-    "11": "srsgw-11 — contact update",
-    "12": "srsgw-12 — contact delete",
-    "13": "srsgw-13 — domain RDAP",
-    "14": "srsgw-14 — nameserver RDAP",
-    "15": "srsgw-15 — registrar RDAP",
+CASE_PREFIX: dict[str, str] = {
+    "srsgw-01": "01", "srsgw-02": "02", "srsgw-03": "03", "srsgw-04": "04",
+    "srsgw-05": "05", "srsgw-06": "06",
+    "srsgw-08": "08", "srsgw-09": "09", "srsgw-10": "10",
+    "srsgw-11": "11", "srsgw-12": "12",
+    "srsgw-13": "13", "srsgw-14": "14", "srsgw-15": "15",
 }
 
 
@@ -49,6 +46,11 @@ def _files_by_suffix(suffix: str) -> list[Path]:
     return [p for p in _all_fixture_files() if p.suffix == suffix]
 
 
+def _files_by_suffixes(*suffixes: str) -> list[Path]:
+    allowed = set(suffixes)
+    return [p for p in _all_fixture_files() if p.suffix in allowed]
+
+
 def _ids_or_placeholder(items: list[Path], placeholder: str) -> list[str]:
     if not items:
         return [placeholder]
@@ -57,18 +59,20 @@ def _ids_or_placeholder(items: list[Path], placeholder: str) -> list[str]:
 
 _JSON_FILES = _files_by_suffix(".json")
 _XML_FILES = _files_by_suffix(".xml")
+_CSV_FILES = _files_by_suffix(".csv")
+_PGP_FILES = _files_by_suffixes(".asc", ".gpg")
 
 
 def test_srsgw_fixture_directory_exists() -> None:
     assert FIXTURE_DIR.is_dir(), f"Missing fixtures folder: {FIXTURE_DIR}."
 
 
-@pytest.mark.parametrize("case_nn", ACTIVE_CASES)
-def test_every_active_srsgw_case_has_at_least_one_fixture(case_nn: str) -> None:
-    matches = sorted(FIXTURE_DIR.glob(f"{case_nn}-*"))
+@pytest.mark.parametrize("case_id", ACTIVE_CASES)
+def test_every_active_srsgw_case_has_at_least_one_fixture(case_id: str) -> None:
+    nn = CASE_PREFIX[case_id]
+    matches = sorted(FIXTURE_DIR.glob(f"{nn}-*"))
     assert matches, (
-        f"SRSGW case prefix '{case_nn}-' ({CASE_LABELS[case_nn]}) "
-        f"has no fixtures under {FIXTURE_DIR}."
+        f"{case_id}: no fixture matching '{nn}-*' under {FIXTURE_DIR}."
     )
 
 
@@ -98,6 +102,37 @@ def test_srsgw_xml_fixtures_are_well_formed(path: Path | None) -> None:
         ET.fromstring(path.read_text(encoding="utf-8"))
     except ET.ParseError as exc:
         pytest.fail(f"Fixture {path.name} is not well-formed XML: {exc}")
+
+
+@pytest.mark.parametrize(
+    "path",
+    _CSV_FILES or [None],
+    ids=_ids_or_placeholder(_CSV_FILES, "no-csv-fixtures"),
+)
+def test_srsgw_csv_fixtures_parse(path: Path | None) -> None:
+    if path is None:
+        pytest.skip("No CSV fixtures present in this suite.")
+    try:
+        with path.open(encoding="utf-8", newline="") as fh:
+            for _ in csv.reader(fh):
+                continue
+    except csv.Error as exc:
+        pytest.fail(f"Fixture {path.name} is not valid CSV: {exc}")
+
+
+@pytest.mark.parametrize(
+    "path",
+    _PGP_FILES or [None],
+    ids=_ids_or_placeholder(_PGP_FILES, "no-pgp-fixtures"),
+)
+def test_srsgw_pgp_armored_headers_present(path: Path | None) -> None:
+    if path is None:
+        pytest.skip("No .asc/.gpg fixtures present in this suite.")
+    body = path.read_bytes()
+    assert len(body) > 0, f"Fixture {path.name} is empty (0 bytes)."
+    assert b"-----BEGIN PGP" in body, (
+        f"Fixture {path.name} is missing the '-----BEGIN PGP' armor header."
+    )
 
 
 def test_srsgw_no_real_env_files_are_committed() -> None:

@@ -124,3 +124,89 @@ No other files modified (audit in `test.md` §3).
 - Latest commit: `b0d58b9 docs(fixtures): refresh top-level READMEs for flat layout`
 - Outstanding work: Tester verifies AC1..AC9 against the plan; AC10
   handled in the Reviewer phase.
+
+## 7. Builder follow-up (12 May 2026) — strict guard signature
+
+Per `.cursor/skills/builder-implementation/SKILL.md`, the Builder
+output contract has been tightened to match the stricter spec in the
+latest task prompt. Three concrete gaps were identified between the
+existing guards and the strict spec, and addressed in one follow-up
+commit:
+
+### 7.1 Gaps closed
+
+| # | Gap                                                                                                                  | Fix                                                                                                                                                              |
+| - | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A | `ACTIVE_CASES` previously held nn-prefix strings (`"01"`, `"02"`) instead of real spec `case_id`s.                   | Switched every guard to a tuple of spec `case_id` strings (`"rde-01"`, `"dns-zz-idna2008-compliance"`, `"dnssecOps01-ZSKRollover"`, …) plus a `CASE_PREFIX` map. |
+| B | No `.csv` parser test. RDE-04 ships `*.csv` deposit samples that were never explicitly validated.                    | Added `test_<suite>_csv_fixtures_parse` to every guard. Iterates `csv.reader(open(path, newline=""))` and fails if `csv.Error` raises.                            |
+| C | No PGP-armor header check. RDE-02 ships `*.asc` placeholders that should at least carry `-----BEGIN PGP`.            | Added `test_<suite>_pgp_armored_headers_present` to every guard. Asserts `len(body) > 0` and `b"-----BEGIN PGP" in body`. Also accepts `.gpg`.                    |
+| D | The "ต้นแบบ EPP guard" file referenced in the plan (`tests/epp/test_epp_th_fixtures_present.py`) didn't actually exist. | Added the canonical template guard; the 8 non-EPP guards now mirror it. The template runs against `internal-rst-checker/fixtures/epp/th/` with `ACTIVE_CASES = ("epp-01", "epp-03", …)`. |
+
+### 7.2 Files changed in this follow-up
+
+**Added:**
+
+- `internal-rst-checker/tests/epp/test_epp_th_fixtures_present.py` — the
+  canonical Builder-spec template, validating the existing
+  `fixtures/epp/th/` set.
+
+**Rewritten (8 non-EPP guards, full body replaced):**
+
+- `internal-rst-checker/tests/dns/test_dns_fixtures_present.py`
+- `internal-rst-checker/tests/dnssec/test_dnssec_fixtures_present.py`
+- `internal-rst-checker/tests/dnssec_ops/test_dnssec_ops_fixtures_present.py`
+- `internal-rst-checker/tests/rde/test_rde_fixtures_present.py`
+- `internal-rst-checker/tests/rdap/test_rdap_fixtures_present.py`
+- `internal-rst-checker/tests/srsgw/test_srsgw_fixtures_present.py`
+- `internal-rst-checker/tests/idn/test_idn_fixtures_present.py`
+- `internal-rst-checker/tests/integration/test_integration_fixtures_present.py`
+
+**Unchanged (Builder-spec items already satisfied in PR #24 base):**
+
+- Every fixture file under `internal-rst-checker/fixtures/<suite>/`
+  (naming, layout, contents already match §3.3 and §4.2 of `plan.md`).
+- Every per-suite `README.md` (already documents placeholders + env
+  templates, mirrors the EPP template).
+- Every `*.env.example` (already shipped, no real values).
+- `internal-rst-checker/fixtures/README.md` + `docs/epp-spec-to-test-mapping.md`.
+
+### 7.3 Commands run
+
+```bash
+# Per-suite smoke (each runs against its own FIXTURE_DIR):
+.venv/bin/python -m pytest internal-rst-checker/tests/epp/test_epp_th_fixtures_present.py -q
+.venv/bin/python -m pytest internal-rst-checker/tests/dns/test_dns_fixtures_present.py -q
+.venv/bin/python -m pytest internal-rst-checker/tests/dnssec/test_dnssec_fixtures_present.py -q
+.venv/bin/python -m pytest internal-rst-checker/tests/dnssec_ops/test_dnssec_ops_fixtures_present.py -q
+.venv/bin/python -m pytest internal-rst-checker/tests/rde/test_rde_fixtures_present.py -q
+.venv/bin/python -m pytest internal-rst-checker/tests/rdap/test_rdap_fixtures_present.py -q
+.venv/bin/python -m pytest internal-rst-checker/tests/srsgw/test_srsgw_fixtures_present.py -q
+.venv/bin/python -m pytest internal-rst-checker/tests/idn/test_idn_fixtures_present.py -q
+.venv/bin/python -m pytest internal-rst-checker/tests/integration/test_integration_fixtures_present.py -q
+
+# Aggregate:
+.venv/bin/python -m pytest internal-rst-checker/tests -q          # 0 failures
+.venv/bin/python -m pytest tests -q                                # 0 failures
+PATH="$PWD/.venv/bin:$PATH" make quality-gate-python              # green
+```
+
+The RDE guard genuinely exercises both new parsers
+(`rde-04` `*.csv` files load via `csv.reader`; `rde-02` `*.asc`
+placeholders carry the required `-----BEGIN PGP SIGNATURE-----`
+header). Every other suite shows a labelled `no-csv-fixtures` /
+`no-pgp-fixtures` skip — same convention used elsewhere when a
+suite legitimately has no files of that type.
+
+### 7.4 Deferred / known limitations
+
+- `make includes` and `make lint` still need apt-installed Perl
+  modules (`Data::Mirror`, `ICANN::RST::Spec`) — pre-existing local
+  environment limitation, handled by CI. Out of scope for the
+  Builder follow-up (touches `.github/workflows/**` would be a
+  scope violation).
+- `pytest internal-rst-checker/tests tests` together still raises 3
+  duplicate-module collection errors (pre-existing repo hygiene
+  issue). The two roots are run separately in CI; no change here.
+- The Builder follow-up keeps the **same fixture files** as PR #24's
+  initial revision: no fixture is added, renamed, or removed. Only
+  the guard tests change shape.

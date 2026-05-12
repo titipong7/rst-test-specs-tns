@@ -1,11 +1,18 @@
-"""Smoke checks ensuring the DNS suite fixture set stays complete and well-formed.
+"""Smoke checks ensuring the EPP `.th` fixture set stays complete and well-formed.
 
 Spec reference:
-    https://icann.github.io/rst-test-specs/v2026.04/rst-test-specs.html#Test-Suite-DNS
-    inc/dns/cases.yaml
+    https://icann.github.io/rst-test-specs/v2026.04/rst-test-specs.html#Test-Suite-EPP
+    inc/epp/cases.yaml
 
-Mirrors the canonical template at
-``internal-rst-checker/tests/epp/test_epp_th_fixtures_present.py``.
+This file is the canonical template that every per-suite
+``test_<suite>_fixtures_present.py`` guard mirrors. The contract:
+
+- ``FIXTURE_DIR`` points at the suite's fixture folder (flat layout).
+- ``ACTIVE_CASES`` carries the real spec ``case_id`` strings; the
+  on-disk 2-digit prefix is resolved through ``CASE_PREFIX``.
+- The five ``test_*`` functions cover presence + ``.xml``, ``.json``,
+  ``.csv``, and PGP-armored ``.asc`` / ``.gpg`` payloads, plus an
+  env-leak guard.
 """
 
 from __future__ import annotations
@@ -18,16 +25,26 @@ from pathlib import Path
 import pytest
 
 
-FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "dns"
+FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "epp" / "th"
 
 ACTIVE_CASES: tuple[str, ...] = (
-    "dns-zz-idna2008-compliance",
-    "dns-zz-consistency",
+    "epp-01", "epp-03", "epp-04", "epp-14", "epp-16",
+    "epp-18", "epp-19", "epp-20", "epp-21",
+    "epp-26", "epp-27",
 )
 
 CASE_PREFIX: dict[str, str] = {
-    "dns-zz-idna2008-compliance": "01",
-    "dns-zz-consistency": "02",
+    "epp-01": "01",
+    "epp-03": "03",
+    "epp-04": "04",
+    "epp-14": "14",
+    "epp-16": "16",
+    "epp-18": "18",
+    "epp-19": "19",
+    "epp-20": "20",
+    "epp-21": "21",
+    "epp-26": "26",
+    "epp-27": "27",
 }
 
 
@@ -56,7 +73,7 @@ _CSV_FILES = _files_by_suffix(".csv")
 _PGP_FILES = _files_by_suffixes(".asc", ".gpg")
 
 
-def test_dns_fixture_directory_exists() -> None:
+def test_epp_th_fixture_directory_exists() -> None:
     assert FIXTURE_DIR.is_dir(), (
         f"Missing fixtures folder: {FIXTURE_DIR}. "
         "Restore from git history or rerun the bootstrap."
@@ -64,7 +81,7 @@ def test_dns_fixture_directory_exists() -> None:
 
 
 @pytest.mark.parametrize("case_id", ACTIVE_CASES)
-def test_every_active_dns_case_has_at_least_one_fixture(case_id: str) -> None:
+def test_every_active_epp_case_has_at_least_one_fixture(case_id: str) -> None:
     nn = CASE_PREFIX[case_id]
     matches = sorted(FIXTURE_DIR.glob(f"{nn}-*"))
     assert matches, (
@@ -77,7 +94,7 @@ def test_every_active_dns_case_has_at_least_one_fixture(case_id: str) -> None:
     _JSON_FILES or [None],
     ids=_ids_or_placeholder(_JSON_FILES, "no-json-fixtures"),
 )
-def test_dns_json_fixtures_parse(path: Path | None) -> None:
+def test_epp_json_fixtures_parse(path: Path | None) -> None:
     if path is None:
         pytest.skip("No JSON fixtures present in this suite.")
     try:
@@ -91,7 +108,7 @@ def test_dns_json_fixtures_parse(path: Path | None) -> None:
     _XML_FILES or [None],
     ids=_ids_or_placeholder(_XML_FILES, "no-xml-fixtures"),
 )
-def test_dns_xml_fixtures_are_well_formed(path: Path | None) -> None:
+def test_epp_xml_fixtures_are_well_formed(path: Path | None) -> None:
     if path is None:
         pytest.skip("No XML fixtures present in this suite.")
     try:
@@ -105,7 +122,7 @@ def test_dns_xml_fixtures_are_well_formed(path: Path | None) -> None:
     _CSV_FILES or [None],
     ids=_ids_or_placeholder(_CSV_FILES, "no-csv-fixtures"),
 )
-def test_dns_csv_fixtures_parse(path: Path | None) -> None:
+def test_epp_csv_fixtures_parse(path: Path | None) -> None:
     if path is None:
         pytest.skip("No CSV fixtures present in this suite.")
     try:
@@ -121,7 +138,7 @@ def test_dns_csv_fixtures_parse(path: Path | None) -> None:
     _PGP_FILES or [None],
     ids=_ids_or_placeholder(_PGP_FILES, "no-pgp-fixtures"),
 )
-def test_dns_pgp_armored_headers_present(path: Path | None) -> None:
+def test_epp_pgp_armored_headers_present(path: Path | None) -> None:
     if path is None:
         pytest.skip("No .asc/.gpg fixtures present in this suite.")
     body = path.read_bytes()
@@ -131,9 +148,9 @@ def test_dns_pgp_armored_headers_present(path: Path | None) -> None:
     )
 
 
-def test_dns_no_real_env_files_are_committed() -> None:
+def test_epp_th_no_real_env_files_are_committed() -> None:
     real_envs = [p for p in FIXTURE_DIR.rglob("*.env") if not p.name.endswith(".env.example")]
     assert not real_envs, (
-        "Real .env files must never be committed under fixtures/dns: "
+        "Real .env files must never be committed under fixtures/epp/th: "
         f"{[str(p.relative_to(FIXTURE_DIR.parent)) for p in real_envs]}"
     )

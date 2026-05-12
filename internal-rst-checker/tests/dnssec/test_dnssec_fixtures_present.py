@@ -3,10 +3,14 @@
 Spec reference:
     https://icann.github.io/rst-test-specs/v2026.04/rst-test-specs.html#Test-Suite-DNSSEC
     inc/dnssec/cases.yaml
+
+Mirrors the canonical template at
+``internal-rst-checker/tests/epp/test_epp_th_fixtures_present.py``.
 """
 
 from __future__ import annotations
 
+import csv
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -16,12 +20,12 @@ import pytest
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "dnssec"
 
-ACTIVE_CASES: tuple[str, ...] = ("91", "92", "93")
+ACTIVE_CASES: tuple[str, ...] = ("dnssec-91", "dnssec-92", "dnssec-93")
 
-CASE_LABELS: dict[str, str] = {
-    "91": "dnssec-91 — permitted signing algorithms",
-    "92": "dnssec-92 — permitted DS digest algorithms",
-    "93": "dnssec-93 — NSEC3 iterations + salt",
+CASE_PREFIX: dict[str, str] = {
+    "dnssec-91": "91",
+    "dnssec-92": "92",
+    "dnssec-93": "93",
 }
 
 
@@ -33,6 +37,11 @@ def _files_by_suffix(suffix: str) -> list[Path]:
     return [p for p in _all_fixture_files() if p.suffix == suffix]
 
 
+def _files_by_suffixes(*suffixes: str) -> list[Path]:
+    allowed = set(suffixes)
+    return [p for p in _all_fixture_files() if p.suffix in allowed]
+
+
 def _ids_or_placeholder(items: list[Path], placeholder: str) -> list[str]:
     if not items:
         return [placeholder]
@@ -41,18 +50,20 @@ def _ids_or_placeholder(items: list[Path], placeholder: str) -> list[str]:
 
 _JSON_FILES = _files_by_suffix(".json")
 _XML_FILES = _files_by_suffix(".xml")
+_CSV_FILES = _files_by_suffix(".csv")
+_PGP_FILES = _files_by_suffixes(".asc", ".gpg")
 
 
 def test_dnssec_fixture_directory_exists() -> None:
     assert FIXTURE_DIR.is_dir(), f"Missing fixtures folder: {FIXTURE_DIR}."
 
 
-@pytest.mark.parametrize("case_nn", ACTIVE_CASES)
-def test_every_active_dnssec_case_has_at_least_one_fixture(case_nn: str) -> None:
-    matches = sorted(FIXTURE_DIR.glob(f"{case_nn}-*"))
+@pytest.mark.parametrize("case_id", ACTIVE_CASES)
+def test_every_active_dnssec_case_has_at_least_one_fixture(case_id: str) -> None:
+    nn = CASE_PREFIX[case_id]
+    matches = sorted(FIXTURE_DIR.glob(f"{nn}-*"))
     assert matches, (
-        f"DNSSEC case prefix '{case_nn}-' ({CASE_LABELS[case_nn]}) "
-        f"has no fixtures under {FIXTURE_DIR}."
+        f"{case_id}: no fixture matching '{nn}-*' under {FIXTURE_DIR}."
     )
 
 
@@ -82,6 +93,37 @@ def test_dnssec_xml_fixtures_are_well_formed(path: Path | None) -> None:
         ET.fromstring(path.read_text(encoding="utf-8"))
     except ET.ParseError as exc:
         pytest.fail(f"Fixture {path.name} is not well-formed XML: {exc}")
+
+
+@pytest.mark.parametrize(
+    "path",
+    _CSV_FILES or [None],
+    ids=_ids_or_placeholder(_CSV_FILES, "no-csv-fixtures"),
+)
+def test_dnssec_csv_fixtures_parse(path: Path | None) -> None:
+    if path is None:
+        pytest.skip("No CSV fixtures present in this suite.")
+    try:
+        with path.open(encoding="utf-8", newline="") as fh:
+            for _ in csv.reader(fh):
+                continue
+    except csv.Error as exc:
+        pytest.fail(f"Fixture {path.name} is not valid CSV: {exc}")
+
+
+@pytest.mark.parametrize(
+    "path",
+    _PGP_FILES or [None],
+    ids=_ids_or_placeholder(_PGP_FILES, "no-pgp-fixtures"),
+)
+def test_dnssec_pgp_armored_headers_present(path: Path | None) -> None:
+    if path is None:
+        pytest.skip("No .asc/.gpg fixtures present in this suite.")
+    body = path.read_bytes()
+    assert len(body) > 0, f"Fixture {path.name} is empty (0 bytes)."
+    assert b"-----BEGIN PGP" in body, (
+        f"Fixture {path.name} is missing the '-----BEGIN PGP' armor header."
+    )
 
 
 def test_dnssec_no_real_env_files_are_committed() -> None:
