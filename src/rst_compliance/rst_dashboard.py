@@ -264,6 +264,11 @@ def load_active_case_ids(suite: str, inc_root: Path) -> tuple[str, ...]:
     return tuple(_read_top_level_keys(inc_root / suite / "cases.yaml"))
 
 
+def load_error_codes(suite: str, inc_root: Path) -> set[str]:
+    """Read `<inc_root>/<suite>/errors.yaml` and return its declared error codes."""
+    return set(_read_top_level_keys(inc_root / suite / "errors.yaml"))
+
+
 def _read_case_maturity_from_yaml(yaml_path: Path) -> dict[str, str]:
     if not yaml_path.is_file():
         return {}
@@ -600,6 +605,82 @@ def summarize_fixture_inventory(
     return inventory
 
 
+def compute_error_code_coverage(
+    fixtures: Sequence[Path],
+    error_codes: Sequence[str] | set[str],
+) -> dict[str, Any]:
+    """Cross-reference spec error codes with the byte content of ``fixtures``.
+
+    ``fixtures`` is an iterable of fixture file paths (typically a suite's
+    ``*-failure.*`` set). Returns the
+    ``{"exercised", "unexercised", "summary"}`` shape that the dashboard
+    serialises into ``report.json``.
+    """
+    code_set: set[str] = set(error_codes)
+    exercised: set[str] = set()
+    for path in fixtures:
+        try:
+            body = Path(path).read_bytes()
+        except OSError:
+            continue
+        for code in code_set:
+            if code.encode() in body:
+                exercised.add(code)
+    ordered_exercised = sorted(exercised)
+    ordered_unexercised = sorted(c for c in code_set if c not in exercised)
+    return {
+        "exercised": ordered_exercised,
+        "unexercised": ordered_unexercised,
+        "summary": {
+            "exercised": len(ordered_exercised),
+            "unexercised": len(ordered_unexercised),
+            "total": len(code_set),
+        },
+    }
+
+
+def _failure_fixtures_for(suite: str, fixtures_root: Path) -> list[Path]:
+    if suite == "epp":
+        failure_files: list[Path] = []
+        for _name, folder in _split_th_subfolder(fixtures_root):
+            failure_files.extend(folder.glob("*-failure.*"))
+        return failure_files
+    suite_root = fixtures_root / suite
+    return list(suite_root.glob("*-failure.*")) if suite_root.is_dir() else []
+
+
+def summarize_error_code_coverage(
+    *,
+    suite: str,
+    error_codes: Sequence[str] | set[str],
+    fixtures_root: Path,
+) -> dict[str, Any]:
+    """Per-suite wrapper that locates the suite's failure fixtures for you."""
+    return compute_error_code_coverage(
+        _failure_fixtures_for(suite, fixtures_root), error_codes
+    )
+
+
+def summarize_all_error_code_coverage(
+    *,
+    repo_root: Path,
+    fixtures_root: Path,
+    suites: Sequence[str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Run ``compute_error_code_coverage`` for every in-scope suite."""
+    target_suites = tuple(suites) if suites else DEFAULT_SUITES
+    inc_root = repo_root / "inc"
+    out: dict[str, dict[str, Any]] = {}
+    for suite in target_suites:
+        codes = load_error_codes(suite, inc_root)
+        if not codes:
+            continue
+        out[suite] = compute_error_code_coverage(
+            _failure_fixtures_for(suite, fixtures_root), codes
+        )
+    return out
+
+
 def summarize_maturity_rollup(
     *,
     suite: str,
@@ -786,6 +867,7 @@ def build_summary(
     suite_coverage: dict[str, Any] | None = None,
     maturity_summary: dict[str, Any] | None = None,
     fixture_inventory: dict[str, Any] | None = None,
+    error_code_coverage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "generatedAt": _now_iso(),
@@ -803,6 +885,7 @@ def build_summary(
         "eppSuiteCoverage": epp_suite_coverage,
         "suiteCoverage": suite_coverage or {},
         "fixtureInventory": fixture_inventory or {},
+        "errorCodeCoverage": error_code_coverage or {},
         "maturitySummary": maturity_summary or {},
         "epp01Connectivity": epp01_connectivity,
         "fipsCheck": fips_summary,
@@ -845,6 +928,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--skip-fixtures",
         action="store_true",
         help="Skip the on-disk fixture inventory walk",
+    )
+    parser.add_argument(
+        "--skip-errors",
+        action="store_true",
+        help="Skip the error-code coverage scan",
     )
     parser.add_argument("--dry-run", action="store_true", help="Prepare reports without running pytest")
     parser.add_argument("--live-epp01", action="store_true", help="Run live connectivity checks for epp-01")
@@ -938,6 +1026,15 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
             suites=suites_filter,
         )
     )
+    error_code_coverage = (
+        {}
+        if args.skip_errors
+        else summarize_all_error_code_coverage(
+            repo_root=paths.repo_root,
+            fixtures_root=fixtures_root,
+            suites=suites_filter,
+        )
+    )
     maturity_summary = summarize_all_maturity(
         repo_root=paths.repo_root,
         suites=suites_filter,
@@ -956,6 +1053,7 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
         epp01_connectivity=epp01_connectivity,
         suite_coverage=suite_coverage,
         fixture_inventory=fixture_inventory,
+        error_code_coverage=error_code_coverage,
         maturity_summary=maturity_summary,
     )
     write_report_files(
