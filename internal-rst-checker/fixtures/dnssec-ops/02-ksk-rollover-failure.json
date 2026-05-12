@@ -6,7 +6,8 @@
   },
   "expectedFindings": [
     "DNSSEC_OPS_KSK_ROLLOVER_CHAIN_OF_TRUST_BROKEN",
-    "DNSSEC_OPS_KSK_ROLLOVER_NOT_COMPLETED"
+    "DNSSEC_OPS_KSK_ROLLOVER_NOT_COMPLETED",
+    "DNSSEC_OPS_DNS_QUERY_FAILED_TOO_MANY_TIMES"
   ],
-  "scenario": "Old KSK removed before the new DS record was added at the parent."
+  "scenario": "Old KSK removed before the new DS record was added at the parent. During the resulting chain-of-trust outage, recursive resolvers returned SERVFAIL beyond the retry budget, raising DNSSEC_OPS_DNS_QUERY_FAILED_TOO_MANY_TIMES in addition to the KSK findings."
 }
