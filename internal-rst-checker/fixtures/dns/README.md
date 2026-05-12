@@ -3,6 +3,9 @@
 Static request/expected-response samples for the `dns` test suite from
 `inc/dns/cases.yaml` (ICANN RST `v2026.04`).
 
+Layout follows the flat EPP template (`<nn>-<slug>-{success,failure}.<ext>`
+directly under this folder).
+
 ## Connection template
 
 Use `dns.env.example` as your local template:
@@ -17,14 +20,14 @@ templates are tracked.
 
 ## Fixture files (per test case)
 
-| Spec case                       | Happy path                                           | Negative path                                       | Notes                                                                                              |
-| ------------------------------- | ---------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `dns-zz-idna2008-compliance`    | `idna2008-compliance/nameservers.success.json`       | `idna2008-compliance/nameservers.failure.json`      | `apex-rrsets.zone` ships sample SOA/NS rrsets used by `IDNA2008_INVALID_*` checks.                |
-| `dns-zz-consistency`            | `consistency/nameservers.success.json`               | `consistency/nameservers.failure.json`              | `query-matrix.json` documents the apex / delegation query set used per nameserver and transport.   |
+| Spec case                    | Happy path                            | Negative path                         | Auxiliary                              |
+| ---------------------------- | ------------------------------------- | ------------------------------------- | -------------------------------------- |
+| `dns-zz-idna2008-compliance` | `01-idna2008-compliance-success.json` | `01-idna2008-compliance-failure.json` | `01-idna2008-apex-rrsets.zone`         |
+| `dns-zz-consistency`         | `02-consistency-success.json`         | `02-consistency-failure.json`         | `02-consistency-query-matrix.json`     |
 
-`tests/dns/test_dns_fixtures_present.py` enforces that every active spec case
-keeps at least one happy and one negative fixture, and that all JSON
-fixtures parse cleanly.
+`tests/dns/test_dns_fixtures_present.py` enforces that every active spec
+case prefix (`01-`, `02-`) keeps at least one fixture file and that all
+JSON fixtures parse cleanly.
 
 ## Placeholder conventions
 

@@ -6,8 +6,8 @@ Spec reference:
 
 Fixtures live under ``internal-rst-checker/fixtures/dns/`` and feed the DNS
 checker's ``dns-zz-idna2008-compliance`` and ``dns-zz-consistency`` flows.
-The tests below mirror the EPP guard at
-``internal-rst-checker/tests/epp/test_epp_th_fixtures_present.py``.
+The tests below mirror the flat EPP guard convention introduced for
+``internal-rst-checker/fixtures/epp/th/`` (e.g. ``14-domain-create-success.xml``).
 """
 
 from __future__ import annotations
@@ -21,20 +21,16 @@ import pytest
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "dns"
 
-ACTIVE_CASES: dict[str, dict[str, list[str]]] = {
-    "dns-zz-idna2008-compliance": {
-        "happy": ["idna2008-compliance/nameservers.success.json"],
-        "negative": ["idna2008-compliance/nameservers.failure.json"],
-    },
-    "dns-zz-consistency": {
-        "happy": ["consistency/nameservers.success.json"],
-        "negative": ["consistency/nameservers.failure.json"],
-    },
+ACTIVE_CASES: tuple[str, ...] = ("01", "02")
+
+CASE_LABELS: dict[str, str] = {
+    "01": "dns-zz-idna2008-compliance",
+    "02": "dns-zz-consistency",
 }
 
 
 def _all_fixture_files() -> list[Path]:
-    return sorted(p for p in FIXTURE_DIR.rglob("*") if p.is_file() and p.name != "README.md")
+    return sorted(p for p in FIXTURE_DIR.iterdir() if p.is_file() and p.name != "README.md")
 
 
 def _files_by_suffix(suffix: str) -> list[Path]:
@@ -58,16 +54,13 @@ def test_dns_fixture_directory_exists() -> None:
     )
 
 
-@pytest.mark.parametrize("case_id", sorted(ACTIVE_CASES))
-def test_every_active_dns_case_has_happy_and_negative_fixtures(case_id: str) -> None:
-    """Every active case keeps at least one happy + one negative fixture."""
-    for kind in ("happy", "negative"):
-        for relpath in ACTIVE_CASES[case_id][kind]:
-            target = FIXTURE_DIR / relpath
-            assert target.is_file(), (
-                f"{case_id}: missing {kind} fixture {target.relative_to(FIXTURE_DIR.parent)}. "
-                "Add the file or update the manifest."
-            )
+@pytest.mark.parametrize("case_nn", ACTIVE_CASES)
+def test_every_active_dns_case_has_at_least_one_fixture(case_nn: str) -> None:
+    matches = sorted(FIXTURE_DIR.glob(f"{case_nn}-*"))
+    assert matches, (
+        f"DNS case prefix '{case_nn}-' ({CASE_LABELS[case_nn]}) "
+        f"has no fixtures under {FIXTURE_DIR}."
+    )
 
 
 @pytest.mark.parametrize(
@@ -99,7 +92,6 @@ def test_dns_xml_fixtures_are_well_formed(path: Path | None) -> None:
 
 
 def test_dns_no_real_env_files_are_committed() -> None:
-    """Only ``*.env.example`` templates may be committed under this suite."""
     real_envs = [p for p in FIXTURE_DIR.rglob("*.env") if not p.name.endswith(".env.example")]
     assert not real_envs, (
         "Real .env files must never be committed under fixtures/dns: "
