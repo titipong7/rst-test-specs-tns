@@ -3,6 +3,9 @@
 Static EPP `<create>` samples for the `idn` test suite from
 `inc/idn/cases.yaml` (ICANN RST `v2026.04`).
 
+Layout follows the flat EPP template (`<nn>-<slug>-{success,failure}.<ext>`
+directly under this folder).
+
 ## Connection template
 
 Use `idn.env.example` as your local template:
@@ -20,13 +23,13 @@ templates are tracked.
 
 ## Fixture files (per test case)
 
-| Spec case | Happy path                                  | Negative path                                                                              | Notes                                                                                                                  |
-| --------- | ------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `idn-01`  | `01-label-validation/create.success.xml`    | `01-label-validation/create.failure.xml`, `01-label-validation/variant-create.failure.xml` | Two negative branches: invalid IDN label + variant create from incorrect registrant.                                   |
-| `idn-02`  | _no spec-level happy fixture — see notes_   | `02-ascii-in-idn-only-tld/create.failure.xml`                                              | Spec only describes a reject path. The happy outcome is "the test is skipped if `idnOnly = false` for all TLDs".       |
+| Spec case | Happy path                              | Negative path                                                            | Notes                                                                                                                  |
+| --------- | --------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `idn-01`  | `01-label-validation-success.xml`       | `01-label-validation-failure.xml`, `01-variant-create-failure.xml`       | Two negative branches: invalid IDN label + variant create from incorrect registrant.                                   |
+| `idn-02`  | _no spec-level happy fixture — see notes_ | `02-ascii-in-idn-only-tld-failure.xml`                                  | Spec only describes a reject path. The happy outcome is "the test is skipped if `idnOnly = false` for all TLDs".       |
 
 `tests/idn/test_idn_fixtures_present.py` enforces presence and
-well-formedness for every active spec case.
+well-formedness for every active spec case prefix (`01-`, `02-`).
 
 ## Placeholder conventions
 

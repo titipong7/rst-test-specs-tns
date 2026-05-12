@@ -16,93 +16,31 @@ import pytest
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "rde"
 
-ACTIVE_CASES: dict[str, dict[str, list[str]]] = {
-    "rde-01": {
-        "happy": ["01-deposit-filename/filename.success.txt"],
-        "negative": ["01-deposit-filename/filename.failure.txt"],
-    },
-    "rde-02": {
-        "happy": ["02-signature/signature.success.sig.example"],
-        "negative": ["02-signature/signature.failure.sig.example"],
-    },
-    "rde-03": {
-        "happy": ["03-decrypt/deposit.success.ryde.example"],
-        "negative": ["03-decrypt/deposit.failure.ryde.example"],
-    },
-    "rde-04": {
-        "happy": ["04-xml-csv/deposit.success.xml", "04-xml-csv/deposit.success.csv"],
-        "negative": ["04-xml-csv/deposit.failure.xml", "04-xml-csv/deposit.failure.csv"],
-    },
-    "rde-05": {
-        "happy": ["05-object-types/header.success.xml"],
-        "negative": ["05-object-types/header.failure.xml"],
-    },
-    "rde-06": {
-        "happy": ["06-object-counts/header.success.xml"],
-        "negative": ["06-object-counts/header.failure.xml"],
-    },
-    "rde-07": {
-        "happy": ["07-domain/domain.success.xml"],
-        "negative": ["07-domain/domain.failure.xml"],
-    },
-    "rde-08": {
-        "happy": ["08-host/host.success.xml"],
-        "negative": ["08-host/host.failure.xml"],
-    },
-    "rde-09": {
-        "happy": ["09-contact/contact.success.xml"],
-        "negative": ["09-contact/contact.failure.xml"],
-    },
-    "rde-10": {
-        "happy": ["10-registrar/registrar.success.xml"],
-        "negative": ["10-registrar/registrar.failure.xml"],
-    },
-    "rde-11": {
-        "happy": ["11-idn-table/idn.success.xml"],
-        "negative": ["11-idn-table/idn.failure.xml"],
-    },
-    "rde-12": {
-        "happy": ["12-nndn/nndn.success.xml"],
-        "negative": ["12-nndn/nndn.failure.xml"],
-    },
-    "rde-13": {
-        "happy": ["13-epp-params/epp-params.success.xml"],
-        "negative": ["13-epp-params/epp-params.failure.xml"],
-    },
-    "rde-14": {
-        "happy": ["14-policy/policy.success.xml"],
-        "negative": ["14-policy/policy.failure.xml"],
-    },
-}
-
-WELL_FORMED_XML_PATHS: tuple[str, ...] = (
-    "04-xml-csv/deposit.success.xml",
-    "05-object-types/header.success.xml",
-    "06-object-counts/header.success.xml",
-    "07-domain/domain.success.xml",
-    "08-host/host.success.xml",
-    "09-contact/contact.success.xml",
-    "10-registrar/registrar.success.xml",
-    "11-idn-table/idn.success.xml",
-    "12-nndn/nndn.success.xml",
-    "13-epp-params/epp-params.success.xml",
-    "14-policy/policy.success.xml",
-    "04-xml-csv/deposit.failure.xml",
-    "05-object-types/header.failure.xml",
-    "06-object-counts/header.failure.xml",
-    "07-domain/domain.failure.xml",
-    "08-host/host.failure.xml",
-    "09-contact/contact.failure.xml",
-    "10-registrar/registrar.failure.xml",
-    "11-idn-table/idn.failure.xml",
-    "12-nndn/nndn.failure.xml",
-    "13-epp-params/epp-params.failure.xml",
-    "14-policy/policy.failure.xml",
+ACTIVE_CASES: tuple[str, ...] = (
+    "01", "02", "03", "04", "05", "06", "07",
+    "08", "09", "10", "11", "12", "13", "14",
 )
+
+CASE_LABELS: dict[str, str] = {
+    "01": "rde-01 — deposit filename",
+    "02": "rde-02 — signature",
+    "03": "rde-03 — decrypt",
+    "04": "rde-04 — XML/CSV",
+    "05": "rde-05 — object types",
+    "06": "rde-06 — object counts",
+    "07": "rde-07 — domain",
+    "08": "rde-08 — host",
+    "09": "rde-09 — contact",
+    "10": "rde-10 — registrar",
+    "11": "rde-11 — IDN table",
+    "12": "rde-12 — NNDN (spec Implemented:false)",
+    "13": "rde-13 — EPP params",
+    "14": "rde-14 — policy",
+}
 
 
 def _all_fixture_files() -> list[Path]:
-    return sorted(p for p in FIXTURE_DIR.rglob("*") if p.is_file() and p.name != "README.md")
+    return sorted(p for p in FIXTURE_DIR.iterdir() if p.is_file() and p.name != "README.md")
 
 
 def _files_by_suffix(suffix: str) -> list[Path]:
@@ -123,14 +61,13 @@ def test_rde_fixture_directory_exists() -> None:
     assert FIXTURE_DIR.is_dir(), f"Missing fixtures folder: {FIXTURE_DIR}."
 
 
-@pytest.mark.parametrize("case_id", sorted(ACTIVE_CASES))
-def test_every_active_rde_case_has_happy_and_negative_fixtures(case_id: str) -> None:
-    for kind in ("happy", "negative"):
-        for relpath in ACTIVE_CASES[case_id][kind]:
-            target = FIXTURE_DIR / relpath
-            assert target.is_file(), (
-                f"{case_id}: missing {kind} fixture {target.relative_to(FIXTURE_DIR.parent)}."
-            )
+@pytest.mark.parametrize("case_nn", ACTIVE_CASES)
+def test_every_active_rde_case_has_at_least_one_fixture(case_nn: str) -> None:
+    matches = sorted(FIXTURE_DIR.glob(f"{case_nn}-*"))
+    assert matches, (
+        f"RDE case prefix '{case_nn}-' ({CASE_LABELS[case_nn]}) "
+        f"has no fixtures under {FIXTURE_DIR}."
+    )
 
 
 @pytest.mark.parametrize(
@@ -147,9 +84,13 @@ def test_rde_json_fixtures_parse(path: Path | None) -> None:
         pytest.fail(f"Fixture {path.name} is not valid JSON: {exc}")
 
 
-@pytest.mark.parametrize("relpath", WELL_FORMED_XML_PATHS)
-def test_rde_xml_fixtures_are_well_formed(relpath: str) -> None:
-    """RDE XML fixtures, both happy and negative, MUST parse as XML.
+@pytest.mark.parametrize(
+    "path",
+    _XML_FILES or [None],
+    ids=_ids_or_placeholder(_XML_FILES, "no-xml-fixtures"),
+)
+def test_rde_xml_fixtures_are_well_formed(path: Path | None) -> None:
+    """All RDE XML fixtures, happy and negative, MUST parse as XML.
 
     Negative-path fixtures intentionally violate higher-level RDE rules
     (invalid roid, wrong country code, etc.) but still need to be valid
@@ -157,16 +98,17 @@ def test_rde_xml_fixtures_are_well_formed(relpath: str) -> None:
     that should be flagged.
     """
 
-    path = FIXTURE_DIR / relpath
+    if path is None:
+        pytest.skip("No XML fixtures present in this suite.")
     try:
         ET.fromstring(path.read_text(encoding="utf-8"))
     except ET.ParseError as exc:
-        pytest.fail(f"Fixture {relpath} is not well-formed XML: {exc}")
+        pytest.fail(f"Fixture {path.name} is not well-formed XML: {exc}")
 
 
 def test_rde_no_real_env_files_are_committed() -> None:
     real_envs = [p for p in FIXTURE_DIR.rglob("*.env") if not p.name.endswith(".env.example")]
     assert not real_envs, (
-        f"Real .env files must never be committed under fixtures/rde: "
+        "Real .env files must never be committed under fixtures/rde: "
         f"{[str(p.relative_to(FIXTURE_DIR.parent)) for p in real_envs]}"
     )

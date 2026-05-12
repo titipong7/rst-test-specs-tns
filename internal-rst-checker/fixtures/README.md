@@ -22,13 +22,23 @@ syntactic validity are enforced by guard tests under
 
 ## Fixture conventions
 
-- **Folder per case.** Each case has its own sub-folder named after the
-  spec case ID (e.g. `dnssec/91-signing-algorithm/`,
-  `srsgw/06-domain-transfer/`).
-- **Happy / negative suffixes.** Files use the
-  `<artifact>.success.<ext>` and `<artifact>.failure.<ext>` suffix
-  pattern. A few cases ship multiple negative branches (e.g.
-  `idn/01-label-validation/variant-create.failure.xml`).
+- **Flat EPP-style layout.** Every non-EPP suite (DNS, DNSSEC,
+  DNSSEC-Ops, RDE, RDAP, SRSGW, IDN, Integration) uses the same shape
+  as the EPP template at `fixtures/epp/th/`: a single root per suite,
+  no sub-folders, files named `<nn>-<slug>-<role>.<ext>` directly under
+  the suite directory. `<role>` is `success` / `failure` for the binary
+  spec assertion, or a descriptive token (`request`, `approve`,
+  `gateway`, `primary`, `create`, `update-domain`, `tsig`, …) for
+  auxiliary artifacts.
+- **Case prefix.** `<nn>` matches the spec case number (DNS / DNSSEC use
+  zero-padded indices from `cases.yaml`; suites that already have spec
+  numbers reuse them — `91`, `92`, `93` for DNSSEC; `91`, `92` for
+  RDAP TLS / service-port).
+- **Happy / failure suffixes.** Files use the
+  `<nn>-<slug>-success.<ext>` and `<nn>-<slug>-failure.<ext>` suffix
+  pattern. A few cases ship multiple negative branches
+  (e.g. `idn/01-variant-create-failure.xml`) or auxiliary frames
+  (e.g. `srsgw/06-domain-transfer-{request,approve}.xml`).
 - **Placeholders only.** All hostnames, IPs, handles, signatures and
   encryption keys are clearly synthetic. The documentation prefixes
   `192.0.2.0/24` and `2001:db8::/32` are used for all IP literals.
@@ -36,21 +46,23 @@ syntactic validity are enforced by guard tests under
   describing the live runtime parameters. Real `*.env` files are
   git-ignored via `.gitignore` and explicitly enforced by every guard
   test.
-- **Binary placeholders.** Files that would normally be binary (PGP
-  signatures, RYDE bundles, public keys) use a `.example` suffix and a
-  human-readable placeholder body. They MUST NOT be replaced by real
-  bytes in this repository.
+- **Binary placeholders.** Files that would normally be binary (RYDE
+  bundles, public keys) use a `.example` suffix and a human-readable
+  placeholder body. PGP signature placeholders use the `.asc` suffix
+  (ASCII-armoured convention). They MUST NOT be replaced by real bytes
+  in this repository.
 
 ## Adding fixtures for a new case
 
 1. Add the case row to the suite's README table.
-2. Drop the new files into the matching `<suite>/<case>/` folder using
-   the `*.success.*` / `*.failure.*` convention.
-3. Extend the suite's guard-test `ACTIVE_CASES` dictionary so the
-   presence check now requires the new paths.
+2. Drop the new files directly under the suite folder using the
+   `<nn>-<slug>-{success,failure}.<ext>` convention (or a descriptive
+   role token for auxiliary artifacts).
+3. Extend the suite's guard-test `ACTIVE_CASES` tuple so the presence
+   check picks up the new prefix.
 4. Run the suite's guard test plus
    `.venv/bin/pytest internal-rst-checker/tests -q` and confirm green.
 
 See `docs/agent-artifacts/fixtures-dns-dnssec-rde-rdap/plan.md` for the
-original requirements and `docs/epp-spec-to-test-mapping.md` for the
+flat-layout migration plan and `docs/epp-spec-to-test-mapping.md` for the
 spec-to-test cross-reference (now extended with non-EPP suites).

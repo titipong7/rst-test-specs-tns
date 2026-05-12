@@ -1,75 +1,101 @@
-# Test — Fixtures for DNS / DNSSEC / RDE / RDAP / SRSGW / IDN / Integration
+# Test — Non-EPP Fixtures Re-aligned to Flat EPP Layout
 
-> Role: **Tester**. Validating the Builder output against the approved
-> Plan acceptance criteria.
->
-> Spec reference: ICANN RST `v2026.04`.
+> Role: **Tester**. Validates the Builder commit chain against the
+> acceptance criteria in
+> [`plan.md` §7](./plan.md).
 
-## Test matrix
+## 1. Test plan
 
-| Criterion (from plan §4)                                                                                  | Command                                                            | Result                                                                                                |
-| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| 1. Every case in §2 has at least one fixture                                                              | `.venv/bin/pytest internal-rst-checker/tests/<suite> -q`           | **PASS** (per-suite counts below)                                                                     |
-| 2. Every case with both branches has `*.success.*` and `*.failure.*` artifacts                            | Same as above (parametrized `test_every_active_*_case_*`)          | **PASS** (`idn-02` and `srsgw-01` documented as spec-only-negative / spec-only-happy respectively)    |
-| 3. Per-suite guard tests pass                                                                             | `.venv/bin/pytest internal-rst-checker/tests -q`                   | **PASS** — 315 passed, 14 skipped                                                                     |
-| 4. Existing top-level tests stay green                                                                    | `.venv/bin/pytest tests -q`                                        | **PASS** — 65 passed, 0 skipped, 0 failed                                                             |
-| 5. README per fixture folder matching `epp/th` layout                                                     | manual inspection                                                  | **PASS** (`fixtures/<suite>/README.md` × 8 + top-level `fixtures/README.md`)                          |
-| 6. No `*.env` (only `*.env.example`) added; `.gitignore` already covers `*.env` under `fixtures/**`       | `test_<suite>_no_real_env_files_are_committed` (one per suite)     | **PASS** — 8/8 suites assert empty real-env list                                                      |
-| 7. No spec files (`inc/**/*.yaml`, `rst-test-specs.*`) modified                                            | `git diff --name-only main…HEAD -- inc rst-test-specs.*`            | **PASS** — no spec paths in diff                                                                      |
-| 8. Reviewer report contains `merge_ready: true` with no `blocker`/`high` findings under the severity gate | see `review.md`                                                    | Pending Reviewer phase                                                                                |
+| AC  | Criterion (from `plan.md` §7)                                                  | Verification command                                                                                | Status                                  |
+| --- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| AC1 | Every `cases.yaml` case (7 suites) has ≥ 1 fixture matching `<nn>-*`           | Per-suite guard tests (`test_<suite>_fixtures_present.py::test_every_active_<suite>_case_…`)        | ✅ PASS (all glob asserts green)         |
+| AC2 | All `*.xml` fixtures parse with `xml.etree.ElementTree.fromstring`             | Per-suite `test_<suite>_xml_fixtures_are_well_formed`                                               | ✅ PASS (skips on suites with no XML)    |
+| AC3 | All `*.json` fixtures load with `json.loads`                                   | Per-suite `test_<suite>_json_fixtures_parse`                                                        | ✅ PASS (skips on suites with no JSON)   |
+| AC4 | `fixtures/<suite>/README.md` carries 1:1 case→file table                       | Manual diff vs. flat layout                                                                         | ✅ PASS (all 7 suites refreshed)         |
+| AC5 | `pytest -q internal-rst-checker/tests` passes                                  | `.venv/bin/python -m pytest internal-rst-checker/tests -q`                                          | ✅ PASS — see §2.1                       |
+| AC6 | `pytest -q tests` (module level) stays green                                   | `.venv/bin/python -m pytest tests -q`                                                               | ✅ PASS — see §2.2                       |
+| AC7 | `make quality-gate` passes locally                                             | `PATH="$PWD/.venv/bin:$PATH" make quality-gate-python` (sub-target)                                 | ✅ PASS for the Python compliance gate. ⚠ `make lint` / `make includes` need Perl modules (`ICANN::RST::Spec`, `Data::Mirror`) that the local environment doesn't ship; both are pre-existing and handled by CI bootstrap, unchanged in this PR. |
+| AC8 | No real `.env` committed under `fixtures/<suite>/`                             | Per-suite `test_<suite>_no_real_env_files_are_committed`                                            | ✅ PASS (only `*.env.example` tracked)   |
+| AC9 | No edits to `inc/**`, `rst-test-specs.*`, `src/rst_compliance/**`, `Makefile`, `.github/workflows/**` | `git diff main…HEAD --stat -- inc src rst-test-specs.* Makefile .github` | ✅ PASS — see §3                          |
+| AC10 | Severity gate (review.md) returns 0 blocker / 0 high                          | Handled by Reviewer phase                                                                            | ⏭ Deferred to Reviewer                  |
 
-## Per-suite results
+## 2. Test results
 
-| Suite          | Test file                                                                      | Result                       |
-| -------------- | ------------------------------------------------------------------------------- | ---------------------------- |
-| DNS            | `internal-rst-checker/tests/dns/test_dns_fixtures_present.py`                   | 12 passed, 1 skipped         |
-| DNSSEC         | `internal-rst-checker/tests/dnssec/test_dnssec_fixtures_present.py`             | 11 passed, 1 skipped         |
-| DNSSEC-Ops     | `internal-rst-checker/tests/dnssec_ops/test_dnssec_ops_fixtures_present.py`     | 11 passed, 1 skipped         |
-| RDE            | `internal-rst-checker/tests/rde/test_rde_fixtures_present.py`                   | 38 passed, 1 skipped         |
-| RDAP           | `internal-rst-checker/tests/rdap/test_rdap_fixtures_present.py` + existing      | 39 passed, 1 skipped         |
-| SRSGW          | `internal-rst-checker/tests/srsgw/test_srsgw_fixtures_present.py`               | 57 passed                    |
-| IDN            | `internal-rst-checker/tests/idn/test_idn_fixtures_present.py`                   | 8 passed, 1 skipped          |
-| Integration    | `internal-rst-checker/tests/integration/test_integration_fixtures_present.py`   | 25 passed                    |
-| EPP (regression check) | existing `internal-rst-checker/tests/epp/*`                              | 112 passed, 8 skipped (unchanged from baseline) |
-| Module tests   | `tests/`                                                                       | 65 passed                    |
-
-**Total:** 380 passed, 14 skipped, 0 failed across `internal-rst-checker/tests` + `tests`.
-
-## Skipped tests breakdown
-
-All 14 skips are the deliberate "no XML / JSON fixtures present in this
-suite" placeholders emitted by the parametrized syntactic-validity
-checks when a suite happens to ship only one of the two file types.
-No EPP-suite skip count changed from the pre-existing baseline
-(8 `if applicable` skips), confirming no regression.
-
-## Fixture inventory
+### 2.1 `pytest -q internal-rst-checker/tests`
 
 ```
-internal-rst-checker/fixtures/
-├── dns/         (6 files + README + env.example)
-├── dnssec/      (6 files + README + env.example)
-├── dnssec-ops/  (7 files + README + env.example + tsig.env.example)
-├── rde/         (28 files + README + env.example)
-├── rdap/        (36 files + README + env.example)
-├── srsgw/       (37 files + README + env.example)
-├── idn/         (4 files + README + env.example)
-└── integration/ (16 files + README + env.example + sftp.env.example)
+........s..............s...........s...................s.....s.s.s.s.... [ 28%]
+.s.s.s.....s............................................................ [ 57%]
+........s................s.............................................. [ 86%]
+..................................                                       [100%]
 ```
 
-Total new files added by Builder: **163** (fixtures + READMEs +
-env.examples + 8 per-suite guard tests + top-level `fixtures/README.md`).
+- 0 failures, 14 deliberate skips. Skips fall into the documented
+  "no JSON / no XML fixtures present" placeholder parametrisations
+  (e.g. SRSGW has no JSON for `01-`/`02-`/…/`12-` so the JSON parse
+  list is empty; the guard test skips with a labelled
+  `no-json-fixtures` id, same convention used in the EPP guard).
 
-## Flaky-test notes
+### 2.2 `pytest -q tests`
 
-- None observed across two consecutive runs of
-  `.venv/bin/pytest internal-rst-checker/tests` (1.14s and ≈1.6s).
-- The 14 "no-fixtures-of-this-type" skips are deterministic and gated
-  on the actual fixture inventory, not on environment.
+```
+.................................................................   [100%]
+```
 
-## Release confidence
+- 0 failures, 0 skips. Module-level Python suite stays green; the
+  fixture move is invisible to it (no test there depends on the old
+  per-case sub-folder paths).
 
-**High.** All Plan acceptance criteria 1–7 verified mechanically; only
-criterion 8 (`merge_ready: true`) is pending the Reviewer step. The
-diff is additive, scope-bound to fixture folders + guard tests + two
-documentation files, and contains no secrets.
+### 2.3 Per-suite guard runs
+
+| Suite        | Command                                                                                          | Result                       |
+| ------------ | ------------------------------------------------------------------------------------------------ | ---------------------------- |
+| `dns`        | `pytest internal-rst-checker/tests/dns/test_dns_fixtures_present.py -q`                          | 9 passed, 1 skip (no XML)    |
+| `dnssec`     | `pytest internal-rst-checker/tests/dnssec/test_dnssec_fixtures_present.py -q`                    | 11 passed, 1 skip (no XML)   |
+| `dnssec-ops` | `pytest internal-rst-checker/tests/dnssec_ops/test_dnssec_ops_fixtures_present.py -q`            | 11 passed, 1 skip (no XML)   |
+| `rde`        | `pytest internal-rst-checker/tests/rde/test_rde_fixtures_present.py -q`                          | 39 passed, 1 skip (no JSON)  |
+| `rdap`       | `pytest internal-rst-checker/tests/rdap/test_rdap_fixtures_present.py -q`                        | 32 passed, 1 skip (no XML)   |
+| `srsgw`      | `pytest internal-rst-checker/tests/srsgw/test_srsgw_fixtures_present.py -q`                      | 57 passed, 0 skip            |
+| `idn`        | `pytest internal-rst-checker/tests/idn/test_idn_fixtures_present.py -q`                          | 8 passed, 1 skip (no JSON)   |
+| `integration`| `pytest internal-rst-checker/tests/integration/test_integration_fixtures_present.py -q`          | 25 passed, 0 skip            |
+
+### 2.4 Combined-run note
+
+`pytest internal-rst-checker/tests tests` raises 3 *collection* errors
+because three test module names are duplicated between the two
+roots (e.g. `tests/test_rdap_conformance.py` and
+`internal-rst-checker/tests/rdap/test_rdap_conformance.py`). This is a
+**pre-existing repository condition**: it reproduces on the `main`
+branch tip without any of the migration changes. The two test roots
+are run separately in CI (and locally via the targeted commands above),
+so the migration does not introduce a regression here.
+
+### 2.5 `make quality-gate-python`
+
+```
+Running Python compliance test gate...
+.................................................................   [100%]
+```
+
+Pre-existing `make lint` / `make includes` Perl bootstrap is **not**
+exercised here; CI continues to handle those steps via apt-installed
+modules (`libdata-mirror-perl`, `libicann-rst-spec-perl`).
+
+## 3. Scope audit (`AC9`)
+
+`git diff main…feat/non-epp-fixtures-flat-layout --stat -- inc src rst-test-specs.html rst-test-specs.json Makefile .github` returns no entries: the migration touches **only**:
+
+- `internal-rst-checker/fixtures/{dns,dnssec,rde,rdap,srsgw,idn,integration}/**`
+- `internal-rst-checker/tests/{dns,dnssec,rde,rdap,srsgw,idn,integration}/test_<suite>_fixtures_present.py`
+- `internal-rst-checker/fixtures/README.md`
+- `docs/epp-spec-to-test-mapping.md` (note paragraph only)
+- `docs/agent-artifacts/fixtures-dns-dnssec-rde-rdap/{plan,build,test,review}.md`
+
+`inc/**`, `src/rst_compliance/**`, `rst-test-specs.*`, `Makefile`, and
+`.github/workflows/**` are unmodified.
+
+## 4. Hand-off to Reviewer
+
+All guard-level acceptance criteria (AC1–AC9) are green; AC10 is the
+formal severity gate handled in `review.md`. Reviewer can proceed to
+the severity gate run + final PR description.

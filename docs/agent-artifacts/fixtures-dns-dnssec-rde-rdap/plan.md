@@ -6,6 +6,16 @@
 > Spec reference: ICANN RST `v2026.04`
 > (`https://icann.github.io/rst-test-specs/v2026.04/rst-test-specs.html`).
 
+> **Update (12 May 2026)** — Layout re-alignment is now applied to **all
+> 8 non-EPP suites including DNSSEC-Ops**. The initial revision of
+> PR #24 ("re-align to flat EPP layout") kept DNSSEC-Ops on its
+> per-case sub-folder layout as a non-goal. A follow-up commit on the
+> same branch re-aligns DNSSEC-Ops to the flat
+> `<nn>-<slug>-{success,failure}.<ext>` shape used by every other
+> suite. The case inventory in §2 is unchanged; the directory layout
+> in §3.1 is now interpreted as "flat names per suite, no
+> sub-folders" everywhere.
+
 ## 1. Goal restated
 
 Fill the fixture coverage gap left by the EPP work. Every active test case in

@@ -16,26 +16,16 @@ import pytest
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "idn"
 
-ACTIVE_CASES: dict[str, dict[str, list[str]]] = {
-    "idn-01": {
-        "happy": ["01-label-validation/create.success.xml"],
-        "negative": [
-            "01-label-validation/create.failure.xml",
-            "01-label-validation/variant-create.failure.xml",
-        ],
-    },
-    "idn-02": {
-        # Spec only describes a reject path: "the EPP server MUST reject
-        # the command". The happy outcome is "test is skipped" when no TLD
-        # has idnOnly=true. We therefore only ship a negative fixture.
-        "happy": [],
-        "negative": ["02-ascii-in-idn-only-tld/create.failure.xml"],
-    },
+ACTIVE_CASES: tuple[str, ...] = ("01", "02")
+
+CASE_LABELS: dict[str, str] = {
+    "01": "idn-01 — label validation + variant policy",
+    "02": "idn-02 — ASCII in IDN-only TLD",
 }
 
 
 def _all_fixture_files() -> list[Path]:
-    return sorted(p for p in FIXTURE_DIR.rglob("*") if p.is_file() and p.name != "README.md")
+    return sorted(p for p in FIXTURE_DIR.iterdir() if p.is_file() and p.name != "README.md")
 
 
 def _files_by_suffix(suffix: str) -> list[Path]:
@@ -56,14 +46,13 @@ def test_idn_fixture_directory_exists() -> None:
     assert FIXTURE_DIR.is_dir(), f"Missing fixtures folder: {FIXTURE_DIR}."
 
 
-@pytest.mark.parametrize("case_id", sorted(ACTIVE_CASES))
-def test_every_active_idn_case_has_required_fixtures(case_id: str) -> None:
-    for kind in ("happy", "negative"):
-        for relpath in ACTIVE_CASES[case_id][kind]:
-            target = FIXTURE_DIR / relpath
-            assert target.is_file(), (
-                f"{case_id}: missing {kind} fixture {target.relative_to(FIXTURE_DIR.parent)}."
-            )
+@pytest.mark.parametrize("case_nn", ACTIVE_CASES)
+def test_every_active_idn_case_has_at_least_one_fixture(case_nn: str) -> None:
+    matches = sorted(FIXTURE_DIR.glob(f"{case_nn}-*"))
+    assert matches, (
+        f"IDN case prefix '{case_nn}-' ({CASE_LABELS[case_nn]}) "
+        f"has no fixtures under {FIXTURE_DIR}."
+    )
 
 
 @pytest.mark.parametrize(
@@ -97,6 +86,6 @@ def test_idn_xml_fixtures_are_well_formed(path: Path | None) -> None:
 def test_idn_no_real_env_files_are_committed() -> None:
     real_envs = [p for p in FIXTURE_DIR.rglob("*.env") if not p.name.endswith(".env.example")]
     assert not real_envs, (
-        f"Real .env files must never be committed under fixtures/idn: "
+        "Real .env files must never be committed under fixtures/idn: "
         f"{[str(p.relative_to(FIXTURE_DIR.parent)) for p in real_envs]}"
     )

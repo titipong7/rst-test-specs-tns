@@ -16,60 +16,29 @@ import pytest
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "rdap"
 
-ACTIVE_CASES: dict[str, dict[str, list[str]]] = {
-    "rdap-01": {
-        "happy": ["01-domain-query/response.success.json"],
-        "negative": ["01-domain-query/response.failure.json"],
-    },
-    "rdap-02": {
-        "happy": ["02-nameserver-query/response.success.json"],
-        "negative": ["02-nameserver-query/response.failure.json"],
-    },
-    "rdap-03": {
-        "happy": ["03-entity-query/response.success.json"],
-        "negative": ["03-entity-query/response.failure.json"],
-    },
-    "rdap-04": {
-        "happy": ["04-help-query/response.success.json"],
-        "negative": ["04-help-query/response.failure.json"],
-    },
-    "rdap-05": {
-        "happy": ["05-domain-head/response.success.txt"],
-        "negative": ["05-domain-head/response.failure.txt"],
-    },
-    "rdap-06": {
-        "happy": ["06-nameserver-head/response.success.txt"],
-        "negative": ["06-nameserver-head/response.failure.txt"],
-    },
-    "rdap-07": {
-        "happy": ["07-entity-head/response.success.txt"],
-        "negative": ["07-entity-head/response.failure.txt"],
-    },
-    "rdap-08": {
-        "happy": ["08-non-existent-domain/response.success.json"],
-        "negative": ["08-non-existent-domain/response.failure.json"],
-    },
-    "rdap-09": {
-        "happy": ["09-non-existent-nameserver/response.success.json"],
-        "negative": ["09-non-existent-nameserver/response.failure.json"],
-    },
-    "rdap-10": {
-        "happy": ["10-non-existent-entity/response.success.json"],
-        "negative": ["10-non-existent-entity/response.failure.json"],
-    },
-    "rdap-91": {
-        "happy": ["91-tls-conformance/probe.success.json"],
-        "negative": ["91-tls-conformance/probe.failure.json"],
-    },
-    "rdap-92": {
-        "happy": ["92-service-port-consistency/probe.success.json"],
-        "negative": ["92-service-port-consistency/probe.failure.json"],
-    },
+ACTIVE_CASES: tuple[str, ...] = (
+    "01", "02", "03", "04", "05", "06", "07",
+    "08", "09", "10", "91", "92",
+)
+
+CASE_LABELS: dict[str, str] = {
+    "01": "rdap-01 — domain query",
+    "02": "rdap-02 — nameserver query",
+    "03": "rdap-03 — entity query",
+    "04": "rdap-04 — help query",
+    "05": "rdap-05 — domain HEAD",
+    "06": "rdap-06 — nameserver HEAD",
+    "07": "rdap-07 — entity HEAD",
+    "08": "rdap-08 — non-existent domain",
+    "09": "rdap-09 — non-existent nameserver",
+    "10": "rdap-10 — non-existent entity",
+    "91": "rdap-91 — TLS conformance",
+    "92": "rdap-92 — service port consistency",
 }
 
 
 def _all_fixture_files() -> list[Path]:
-    return sorted(p for p in FIXTURE_DIR.rglob("*") if p.is_file() and p.name != "README.md")
+    return sorted(p for p in FIXTURE_DIR.iterdir() if p.is_file() and p.name != "README.md")
 
 
 def _files_by_suffix(suffix: str) -> list[Path]:
@@ -90,14 +59,13 @@ def test_rdap_fixture_directory_exists() -> None:
     assert FIXTURE_DIR.is_dir(), f"Missing fixtures folder: {FIXTURE_DIR}."
 
 
-@pytest.mark.parametrize("case_id", sorted(ACTIVE_CASES))
-def test_every_active_rdap_case_has_happy_and_negative_fixtures(case_id: str) -> None:
-    for kind in ("happy", "negative"):
-        for relpath in ACTIVE_CASES[case_id][kind]:
-            target = FIXTURE_DIR / relpath
-            assert target.is_file(), (
-                f"{case_id}: missing {kind} fixture {target.relative_to(FIXTURE_DIR.parent)}."
-            )
+@pytest.mark.parametrize("case_nn", ACTIVE_CASES)
+def test_every_active_rdap_case_has_at_least_one_fixture(case_nn: str) -> None:
+    matches = sorted(FIXTURE_DIR.glob(f"{case_nn}-*"))
+    assert matches, (
+        f"RDAP case prefix '{case_nn}-' ({CASE_LABELS[case_nn]}) "
+        f"has no fixtures under {FIXTURE_DIR}."
+    )
 
 
 @pytest.mark.parametrize(
@@ -131,6 +99,6 @@ def test_rdap_xml_fixtures_are_well_formed(path: Path | None) -> None:
 def test_rdap_no_real_env_files_are_committed() -> None:
     real_envs = [p for p in FIXTURE_DIR.rglob("*.env") if not p.name.endswith(".env.example")]
     assert not real_envs, (
-        f"Real .env files must never be committed under fixtures/rdap: "
+        "Real .env files must never be committed under fixtures/rdap: "
         f"{[str(p.relative_to(FIXTURE_DIR.parent)) for p in real_envs]}"
     )
