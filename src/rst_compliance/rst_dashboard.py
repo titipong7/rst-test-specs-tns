@@ -831,7 +831,8 @@ def render_terminal_table(case_results: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def render_placeholder_html(summary: dict[str, Any]) -> str:
+def render_legacy_placeholder_html(summary: dict[str, Any]) -> str:
+    """Tiny fallback used in dry-run when pytest-html didn't write report.html."""
     rows = "\n".join(
         f"<tr><td>{case['testCase']}</td><td>{case['status']}</td><td>{case['reason']}</td></tr>"
         for case in summary["caseResults"]
@@ -843,6 +844,7 @@ def render_placeholder_html(summary: dict[str, Any]) -> str:
   <h1>RST Internal Dashboard</h1>
   <p>Generated: {summary["generatedAt"]}</p>
   <p>Status: {summary["run"]["status"]}</p>
+  <p>For the full coverage view see <a href="dashboard.html">dashboard.html</a>.</p>
   <table border="1" cellspacing="0" cellpadding="6">
     <thead><tr><th>Test Case</th><th>Status</th><th>Reason</th></tr></thead>
     <tbody>{rows}</tbody>
@@ -850,6 +852,357 @@ def render_placeholder_html(summary: dict[str, Any]) -> str:
 </body>
 </html>
 """
+
+
+# Back-compat alias: external callers that import `render_placeholder_html`
+# keep working; the contract is preserved while the canonical name now flags
+# its placeholder/legacy nature.
+render_placeholder_html = render_legacy_placeholder_html
+
+
+_DASHBOARD_CSS = """
+:root {
+  --ok: #2ea44f;
+  --warn: #bf8700;
+  --bad: #cf222e;
+  --muted: #6e7781;
+  --bg: #ffffff;
+  --bg-alt: #f6f8fa;
+  --border: #d0d7de;
+  --text: #1f2328;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.5;
+}
+main { padding: 1.5rem 2rem 3rem; max-width: 1280px; margin: 0 auto; }
+h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+h2 { margin-top: 2rem; font-size: 1.15rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+h3 { margin-top: 1.25rem; font-size: 1.0rem; }
+.subtle { color: var(--muted); font-size: 0.9rem; margin: 0 0 1rem; }
+.card-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0 1.5rem; }
+.card {
+  flex: 1 1 200px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  background: var(--bg-alt);
+}
+.card .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.card .value { font-size: 1.5rem; font-weight: 600; margin-top: 0.25rem; }
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+}
+.badge-covered { background: var(--ok); }
+.badge-partial { background: var(--warn); }
+.badge-missing { background: var(--bad); }
+.badge-muted   { background: var(--muted); }
+table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; font-size: 0.85rem; }
+th, td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+tr:nth-child(even) td { background: var(--bg-alt); }
+th { background: #eaeef2; font-weight: 600; }
+details { border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.75rem; margin: 0.75rem 0; background: var(--bg); }
+details > summary { cursor: pointer; font-weight: 600; }
+details[open] > summary { margin-bottom: 0.5rem; }
+.maturity-bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--ok); margin-right: 0.25rem; vertical-align: middle; }
+footer { color: var(--muted); font-size: 0.8rem; margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+code { background: var(--bg-alt); padding: 0 4px; border-radius: 3px; font-size: 0.85rem; }
+""".strip()
+
+
+def _esc(value: Any) -> str:
+    import html as _html
+
+    return _html.escape(str(value), quote=True)
+
+
+def _cap_files(files: list[str], cap: int = 4) -> str:
+    if not files:
+        return "<em>(none)</em>"
+    shown = files[:cap]
+    extra = len(files) - len(shown)
+    text = ", ".join(f"<code>{_esc(name)}</code>" for name in shown)
+    if extra > 0:
+        text += f" <span class=\"badge badge-muted\">+{extra} more</span>"
+    return text
+
+
+def _badge_for_status(status: str) -> str:
+    return (
+        f"<span class=\"badge badge-"
+        f"{status if status in {'covered', 'partial', 'missing'} else 'muted'}\""
+        f">{_esc(status)}</span>"
+    )
+
+
+def render_html_report(summary: dict[str, Any]) -> str:
+    """Render a self-contained, no-JS dashboard view of the summary.
+
+    Output is a single HTML5 document with inline CSS — no `<script>`s,
+    no external resources beyond the ICANN spec link in the header.
+    """
+    suite_coverage = summary.get("suiteCoverage", {}) or {}
+    fixture_inventory = summary.get("fixtureInventory", {}) or {}
+    error_coverage = summary.get("errorCodeCoverage", {}) or {}
+    maturity = summary.get("maturitySummary", {}) or {}
+    case_results = summary.get("caseResults", []) or []
+
+    suite_order = sorted(
+        set(suite_coverage) | set(fixture_inventory) | set(error_coverage) | set(maturity)
+    )
+
+    totals = {"covered": 0, "partial": 0, "missing": 0}
+    for sc in suite_coverage.values():
+        s = sc.get("summary", {})
+        for k in totals:
+            totals[k] += int(s.get(k, 0))
+
+    pass_count = sum(1 for c in case_results if c.get("status") == "pass")
+    fail_count = sum(1 for c in case_results if c.get("status") in {"fail", "error"})
+    skip_count = sum(1 for c in case_results if c.get("status") == "skipped")
+
+    cards = (
+        ("Suites", str(len(suite_order))),
+        ("Cases covered", str(totals["covered"])),
+        ("Cases partial", str(totals["partial"])),
+        ("Cases missing", str(totals["missing"])),
+        ("Test cases (pass/fail/skip)", f"{pass_count}/{fail_count}/{skip_count}"),
+    )
+
+    header_html = f"""
+<header>
+  <h1>RST Internal Dashboard</h1>
+  <p class="subtle">
+    Generated <strong>{_esc(summary.get("generatedAt", "-"))}</strong>
+    • Spec <a href="https://icann.github.io/rst-test-specs/v2026.04/rst-test-specs.html">{_esc(summary.get("rstSpecVersion", "-"))}</a>
+    • Run status: <strong>{_esc(summary.get("run", {}).get("status", "-"))}</strong>
+  </p>
+  <div class="card-row">
+    {"".join(f'<div class="card"><div class="label">{_esc(lbl)}</div><div class="value">{_esc(val)}</div></div>' for lbl, val in cards)}
+  </div>
+</header>
+""".strip()
+
+    coverage_blocks: list[str] = []
+    for suite in suite_order:
+        sc = suite_coverage.get(suite, {})
+        matrix = sc.get("matrix", [])
+        if not matrix:
+            continue
+        summary_line = sc.get("summary", {})
+        rows: list[str] = []
+        for entry in matrix:
+            cid = _esc(entry.get("caseId", "-"))
+            tests = entry.get("tests", []) or []
+            test_html = (
+                "<br>".join(f"<code>{_esc(t)}</code>" for t in tests) or "<em>(none)</em>"
+            )
+            reason = _esc(entry.get("reason", "-"))
+            rows.append(
+                "<tr>"
+                f"<td><code>{cid}</code></td>"
+                f"<td>{_badge_for_status(entry.get('status', '-'))}</td>"
+                f"<td>{test_html}</td>"
+                f"<td>{reason}</td>"
+                "</tr>"
+            )
+        coverage_blocks.append(
+            f"""
+<details open>
+  <summary>{_esc(suite)} — covered {summary_line.get('covered', 0)} • partial {summary_line.get('partial', 0)} • missing {summary_line.get('missing', 0)}</summary>
+  <table>
+    <thead><tr><th>case_id</th><th>status</th><th>mapped tests</th><th>reason</th></tr></thead>
+    <tbody>
+{chr(10).join(rows)}
+    </tbody>
+  </table>
+</details>
+""".strip()
+        )
+
+    fixture_rows: list[str] = []
+    for suite in suite_order:
+        rows = fixture_inventory.get(suite, [])
+        for entry in rows:
+            cid = entry.get("caseId") or "—"
+            files = list(entry.get("files", []))
+            parses = entry.get("parses", {})
+            all_parse = all(parses.get(f, False) for f in files) if files else False
+            badge = "covered" if all_parse else "partial"
+            fixture_rows.append(
+                "<tr>"
+                f"<td><code>{_esc(suite)}</code></td>"
+                f"<td><code>{_esc(cid)}</code></td>"
+                f"<td>{_cap_files(files)}</td>"
+                f"<td>{_badge_for_status(badge)}</td>"
+                "</tr>"
+            )
+    fixture_section = (
+        '<p class="subtle">No fixtures on disk.</p>'
+        if not fixture_rows
+        else f"""
+<table>
+  <thead><tr><th>suite</th><th>case_id</th><th>files</th><th>parses</th></tr></thead>
+  <tbody>
+{chr(10).join(fixture_rows)}
+  </tbody>
+</table>
+""".strip()
+    )
+
+    error_rows: list[str] = []
+    for suite in suite_order:
+        ec = error_coverage.get(suite)
+        if not ec:
+            continue
+        summary_ec = ec.get("summary", {})
+        ex = ec.get("exercised", []) or []
+        un = ec.get("unexercised", []) or []
+        error_rows.append(
+            "<tr>"
+            f"<td><code>{_esc(suite)}</code></td>"
+            f"<td>{summary_ec.get('exercised', 0)} / {summary_ec.get('total', 0)}</td>"
+            f"<td>{_cap_files([_esc(x) for x in ex])}</td>"
+            f"<td>{_cap_files([_esc(x) for x in un])}</td>"
+            "</tr>"
+        )
+    error_section = (
+        '<p class="subtle">No error-code data.</p>'
+        if not error_rows
+        else f"""
+<table>
+  <thead><tr><th>suite</th><th>exercised / total</th><th>exercised codes</th><th>unexercised codes</th></tr></thead>
+  <tbody>
+{chr(10).join(error_rows)}
+  </tbody>
+</table>
+""".strip()
+    )
+
+    maturity_rows: list[str] = []
+    max_total = max((m.get("total", 0) for m in maturity.values()), default=1) or 1
+    for suite in suite_order:
+        m = maturity.get(suite)
+        if not m:
+            continue
+        parts = []
+        for level in ("GAMMA", "BETA", "ALPHA", "UNKNOWN"):
+            n = int(m.get(level, 0))
+            if n:
+                width = max(2, int(120 * n / max_total))
+                colour = {
+                    "GAMMA": "#2ea44f",
+                    "BETA": "#bf8700",
+                    "ALPHA": "#cf222e",
+                    "UNKNOWN": "#6e7781",
+                }[level]
+                parts.append(
+                    f"<span title=\"{level} {n}\" class=\"maturity-bar\" "
+                    f"style=\"width:{width}px;background:{colour};\""
+                    f"></span>{_esc(level)}={n}"
+                )
+        maturity_rows.append(
+            f"<tr><td><code>{_esc(suite)}</code></td><td>{m.get('total', 0)}</td><td>{' '.join(parts)}</td></tr>"
+        )
+    maturity_section = (
+        '<p class="subtle">No maturity data.</p>'
+        if not maturity_rows
+        else f"""
+<table>
+  <thead><tr><th>suite</th><th>total cases</th><th>maturity mix</th></tr></thead>
+  <tbody>
+{chr(10).join(maturity_rows)}
+  </tbody>
+</table>
+""".strip()
+    )
+
+    case_rows: list[str] = []
+    for case in case_results[:500]:  # cap to keep file size bounded
+        case_rows.append(
+            "<tr>"
+            f"<td><code>{_esc(case.get('testCase', '-'))}</code></td>"
+            f"<td>{_badge_for_status({'pass': 'covered', 'fail': 'missing', 'error': 'missing', 'skipped': 'partial'}.get(case.get('status', ''), 'partial'))}</td>"
+            f"<td>{_esc(case.get('reason', '-'))}</td>"
+            "</tr>"
+        )
+    case_section = (
+        '<p class="subtle">No test-execution results (dry-run or pytest skipped).</p>'
+        if not case_rows
+        else f"""
+<table>
+  <thead><tr><th>test case</th><th>status</th><th>reason</th></tr></thead>
+  <tbody>
+{chr(10).join(case_rows)}
+  </tbody>
+</table>
+""".strip()
+    )
+
+    footer_html = """
+<footer>
+  <p>
+    Artefacts:
+    <code>report.json</code>,
+    <code>report.html</code> (pytest-html test-execution view),
+    <code>report-junit.xml</code>.
+    This page is the internal coverage dashboard;
+    for raw test-execution detail open <code>report.html</code>.
+  </p>
+</footer>
+""".strip()
+
+    coverage_section = (
+        '<p class="subtle">No suite coverage data.</p>'
+        if not coverage_blocks
+        else "\n".join(coverage_blocks)
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>RST Internal Dashboard</title>
+  <style>{_DASHBOARD_CSS}</style>
+</head>
+<body>
+<main>
+{header_html}
+<h2>Per-suite coverage</h2>
+{coverage_section}
+<h2>Fixture inventory</h2>
+{fixture_section}
+<h2>Error-code coverage</h2>
+{error_section}
+<h2>Maturity rollup</h2>
+{maturity_section}
+<h2>Case results</h2>
+{case_section}
+{footer_html}
+</main>
+</body>
+</html>
+"""
+
+
+# Back-compat alias: `render_dashboard_html` was the working name during the
+# initial prototype; production code should call `render_html_report`.
+render_dashboard_html = render_html_report
 
 
 def build_summary(
@@ -915,6 +1268,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reports-dir", type=Path, help="Override reports output directory")
     parser.add_argument("--json-report", type=Path, help="Optional JSON report file path")
     parser.add_argument("--html-report", type=Path, help="Optional HTML report file path")
+    parser.add_argument(
+        "--dashboard-html",
+        type=Path,
+        help="Override the dashboard HTML output path (defaults to reports/dashboard.html)",
+    )
+    parser.add_argument(
+        "--no-dashboard",
+        action="store_true",
+        help="Skip rendering the dashboard HTML file",
+    )
     parser.add_argument(
         "--suite",
         action="append",
@@ -1061,9 +1424,17 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
         reports_root=paths.reports_root,
         json_report=args.json_report.resolve() if args.json_report else None,
     )
+    dashboard_html_path = (
+        args.dashboard_html.resolve()
+        if args.dashboard_html
+        else paths.reports_root / "dashboard.html"
+    )
+    if not args.no_dashboard:
+        dashboard_html_path.parent.mkdir(parents=True, exist_ok=True)
+        dashboard_html_path.write_text(render_html_report(summary), encoding="utf-8")
     if args.dry_run and not html_report.exists():
         html_report.parent.mkdir(parents=True, exist_ok=True)
-        html_report.write_text(render_placeholder_html(summary), encoding="utf-8")
+        html_report.write_text(render_legacy_placeholder_html(summary), encoding="utf-8")
     return int(run_summary["returncode"])
 
 
