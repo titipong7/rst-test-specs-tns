@@ -26,8 +26,27 @@ Before first run on a new machine, install gate dependencies:
 
 - `make bootstrap-quality-gate`
 
-This installs required Perl modules and `schemalint`.
-The lint target resolves `schemalint` from `~/.local/bin` automatically.
+This installs required Perl modules under `~/perl5` and `schemalint` under
+`~/.local/bin`. The Makefile auto-exports `PERL5LIB` (when `~/perl5/lib/perl5`
+exists) and prepends `~/.local/bin` + `~/perl5/bin` to `PATH`, so subsequent
+`make quality-gate` invocations find the modules without any manual env
+tweaks.
+
+If the Perl side has not been bootstrapped, `make quality-gate` now exits
+early via the `quality-gate-preflight` check with an actionable message:
+
+```
+$ make quality-gate
+ERROR: Perl prerequisites for 'make quality-gate' are missing.
+
+  Fix options:
+    1) Install everything once:  make bootstrap-quality-gate
+    2) Run the Python-only gate: make quality-gate-python
+    3) Run the combined Python sweep: make test-all
+```
+
+This replaces the previous cryptic `Can't locate Data/Mirror.pm` crash
+inside `tools/generate-zonemaster-cases.pl`. See review finding Info-2.
 
 In CI, `.github/workflows/quality-gate.yaml` performs bootstrap first and then
 runs `make quality-gate`.
