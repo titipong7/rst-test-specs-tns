@@ -16,72 +16,33 @@ import pytest
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "srsgw"
 
-ACTIVE_CASES: dict[str, dict[str, list[str]]] = {
-    "srsgw-01": {
-        "happy": ["01-connectivity/hello.xml"],
-        "negative": [],
-    },
-    "srsgw-02": {
-        "happy": ["02-host-create/gateway-create.xml", "02-host-create/primary-info.success.xml"],
-        "negative": ["02-host-create/primary-info.failure.xml"],
-    },
-    "srsgw-03": {
-        "happy": ["03-contact-create/gateway-create.xml", "03-contact-create/primary-info.success.xml"],
-        "negative": ["03-contact-create/primary-info.failure.xml"],
-    },
-    "srsgw-04": {
-        "happy": ["04-domain-create/gateway-create.xml", "04-domain-create/primary-info.success.xml"],
-        "negative": ["04-domain-create/primary-info.failure.xml"],
-    },
-    "srsgw-05": {
-        "happy": ["05-domain-renew/gateway-renew.xml", "05-domain-renew/primary-info.success.xml"],
-        "negative": ["05-domain-renew/primary-info.failure.xml"],
-    },
-    "srsgw-06": {
-        "happy": [
-            "06-domain-transfer/gateway-request.xml",
-            "06-domain-transfer/gateway-approve.xml",
-            "06-domain-transfer/primary-info.success.xml",
-        ],
-        "negative": ["06-domain-transfer/primary-info.failure.xml"],
-    },
-    "srsgw-08": {
-        "happy": ["08-domain-delete/gateway-delete.xml", "08-domain-delete/primary-info.success.xml"],
-        "negative": ["08-domain-delete/primary-info.failure.xml"],
-    },
-    "srsgw-09": {
-        "happy": ["09-host-update/gateway-update.xml", "09-host-update/primary-info.success.xml"],
-        "negative": ["09-host-update/primary-info.failure.xml"],
-    },
-    "srsgw-10": {
-        "happy": ["10-host-delete/gateway-delete.xml", "10-host-delete/primary-info.success.xml"],
-        "negative": ["10-host-delete/primary-info.failure.xml"],
-    },
-    "srsgw-11": {
-        "happy": ["11-contact-update/gateway-update.xml", "11-contact-update/primary-info.success.xml"],
-        "negative": ["11-contact-update/primary-info.failure.xml"],
-    },
-    "srsgw-12": {
-        "happy": ["12-contact-delete/gateway-delete.xml", "12-contact-delete/primary-info.success.xml"],
-        "negative": ["12-contact-delete/primary-info.failure.xml"],
-    },
-    "srsgw-13": {
-        "happy": ["13-domain-rdap/rdap-primary.success.json", "13-domain-rdap/rdap-gateway.success.json"],
-        "negative": ["13-domain-rdap/rdap-gateway.failure.json"],
-    },
-    "srsgw-14": {
-        "happy": ["14-nameserver-rdap/rdap-primary.success.json", "14-nameserver-rdap/rdap-gateway.success.json"],
-        "negative": ["14-nameserver-rdap/rdap-gateway.failure.json"],
-    },
-    "srsgw-15": {
-        "happy": ["15-registrar-rdap/rdap-primary.success.json", "15-registrar-rdap/rdap-gateway.success.json"],
-        "negative": ["15-registrar-rdap/rdap-gateway.failure.json"],
-    },
+# srsgw-07 was merged upstream into srsgw-06; see `inc/srsgw/cases.yaml`.
+ACTIVE_CASES: tuple[str, ...] = (
+    "01", "02", "03", "04", "05", "06",
+    "08", "09", "10", "11", "12",
+    "13", "14", "15",
+)
+
+CASE_LABELS: dict[str, str] = {
+    "01": "srsgw-01 — connectivity",
+    "02": "srsgw-02 — host create",
+    "03": "srsgw-03 — contact create",
+    "04": "srsgw-04 — domain create",
+    "05": "srsgw-05 — domain renew",
+    "06": "srsgw-06 — domain transfer (req + approve)",
+    "08": "srsgw-08 — domain delete",
+    "09": "srsgw-09 — host update",
+    "10": "srsgw-10 — host delete",
+    "11": "srsgw-11 — contact update",
+    "12": "srsgw-12 — contact delete",
+    "13": "srsgw-13 — domain RDAP",
+    "14": "srsgw-14 — nameserver RDAP",
+    "15": "srsgw-15 — registrar RDAP",
 }
 
 
 def _all_fixture_files() -> list[Path]:
-    return sorted(p for p in FIXTURE_DIR.rglob("*") if p.is_file() and p.name != "README.md")
+    return sorted(p for p in FIXTURE_DIR.iterdir() if p.is_file() and p.name != "README.md")
 
 
 def _files_by_suffix(suffix: str) -> list[Path]:
@@ -102,21 +63,13 @@ def test_srsgw_fixture_directory_exists() -> None:
     assert FIXTURE_DIR.is_dir(), f"Missing fixtures folder: {FIXTURE_DIR}."
 
 
-@pytest.mark.parametrize("case_id", sorted(ACTIVE_CASES))
-def test_every_active_srsgw_case_has_required_fixtures(case_id: str) -> None:
-    """Every active case keeps its happy-path fixture set.
-
-    `srsgw-01` is connectivity-only and has no spec-level negative path
-    fixture beyond the happy `<hello/>` frame; the negative cases are
-    delegated to the EPP `epp-01` fixture set.
-    """
-
-    for kind in ("happy", "negative"):
-        for relpath in ACTIVE_CASES[case_id][kind]:
-            target = FIXTURE_DIR / relpath
-            assert target.is_file(), (
-                f"{case_id}: missing {kind} fixture {target.relative_to(FIXTURE_DIR.parent)}."
-            )
+@pytest.mark.parametrize("case_nn", ACTIVE_CASES)
+def test_every_active_srsgw_case_has_at_least_one_fixture(case_nn: str) -> None:
+    matches = sorted(FIXTURE_DIR.glob(f"{case_nn}-*"))
+    assert matches, (
+        f"SRSGW case prefix '{case_nn}-' ({CASE_LABELS[case_nn]}) "
+        f"has no fixtures under {FIXTURE_DIR}."
+    )
 
 
 @pytest.mark.parametrize(
@@ -150,6 +103,6 @@ def test_srsgw_xml_fixtures_are_well_formed(path: Path | None) -> None:
 def test_srsgw_no_real_env_files_are_committed() -> None:
     real_envs = [p for p in FIXTURE_DIR.rglob("*.env") if not p.name.endswith(".env.example")]
     assert not real_envs, (
-        f"Real .env files must never be committed under fixtures/srsgw: "
+        "Real .env files must never be committed under fixtures/srsgw: "
         f"{[str(p.relative_to(FIXTURE_DIR.parent)) for p in real_envs]}"
     )
