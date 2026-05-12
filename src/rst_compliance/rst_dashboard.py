@@ -23,11 +23,23 @@ CASE_ID_PATTERN: re.Pattern[str] = re.compile(
     r"-(?:zz-[a-z0-9-]+|\d+)\b",
     re.IGNORECASE,
 )
-CASE_ID_PATTERNS: tuple[re.Pattern[str], ...] = (CASE_ID_PATTERN,)
+# DNSSEC-Ops case_ids are camelCased (e.g. `dnssecOps01-ZSKRollover`) and so
+# cannot be matched by CASE_ID_PATTERN, whose suite list is followed by a
+# literal hyphen + numeric/zz slug. Track them as a second pattern.
+DNSSEC_OPS_CASE_ID_PATTERN: re.Pattern[str] = re.compile(
+    r"\bdnssecOps\d+-[A-Za-z][A-Za-z0-9]*\b",
+)
+CASE_ID_PATTERNS: tuple[re.Pattern[str], ...] = (
+    CASE_ID_PATTERN,
+    DNSSEC_OPS_CASE_ID_PATTERN,
+)
 
 
 def _extract_case_ids(text: str) -> set[str]:
-    return {match for match in CASE_ID_PATTERN.findall(text)}
+    matches: set[str] = set()
+    for pattern in CASE_ID_PATTERNS:
+        matches.update(pattern.findall(text))
+    return matches
 
 
 
