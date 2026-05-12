@@ -1,0 +1,19 @@
+[
+  {
+    "name": "example",
+    "nameservers": [
+      {
+        "name": "ns1.example",
+        "v4Addrs": ["192.0.2.1"],
+        "v6Addrs": ["2001:db8::53:1"],
+        "supportsDoT": true
+      },
+      {
+        "name": "ns2.example",
+        "v4Addrs": ["192.0.2.2"],
+        "v6Addrs": ["2001:db8::53:2"],
+        "supportsDoH": true
+      }
+    ]
+  }
+]

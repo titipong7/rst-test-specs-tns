@@ -1,0 +1,16 @@
+; Synthetic apex RRsets used to drive `dns-zz-idna2008-compliance` smoke checks.
+; This file is illustrative — it is not loaded by a live nameserver.
+$ORIGIN example.
+$TTL 3600
+@   IN  SOA   ns1.example. hostmaster.example. (
+                2026051201 ; serial
+                7200       ; refresh
+                3600       ; retry
+                1209600    ; expire
+                3600 )     ; minimum
+@   IN  NS    ns1.example.
+@   IN  NS    ns2.example.
+@   IN  NS    xn--idn-example-7za.example.
+ns1 IN  A     192.0.2.1
+ns2 IN  A     192.0.2.2
+xn--idn-example-7za IN A 192.0.2.3

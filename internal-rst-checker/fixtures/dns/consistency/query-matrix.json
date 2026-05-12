@@ -1,0 +1,29 @@
+{
+  "transports": ["udp", "tcp", "dot", "doh", "doq"],
+  "apexQueries": [
+    "SOA",
+    "NS",
+    "DNSKEY",
+    "NSEC3PARAM",
+    "TXT"
+  ],
+  "perDelegationQueries": [
+    "A",
+    "AAAA"
+  ],
+  "tldSubordinateQueries": [
+    {"name": "nic.example", "type": "NS"},
+    {"name": "nic.example", "type": "DS"}
+  ],
+  "edns": {
+    "doBit": true,
+    "options": ["NSID", "ZONEVERSION"]
+  },
+  "timeoutsMs": {
+    "udp": 1000,
+    "tcp": 3000,
+    "dot": 3000,
+    "doh": 3000,
+    "doq": 3000
+  }
+}

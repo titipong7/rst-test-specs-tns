@@ -1,0 +1,14 @@
+[
+  {
+    "name": "example",
+    "soa": {
+      "mname": "ns1.example",
+      "rname": "hostmaster.example"
+    },
+    "apexNs": [
+      "ns1.example",
+      "ns2.example",
+      "xn--idn-example-7za.example"
+    ]
+  }
+]
