@@ -304,6 +304,43 @@ def test_map_spec_criteria_finds_dns_zz_case_id(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def test_load_active_case_ids_strips_leading_utf8_bom(tmp_path: Path) -> None:
+    """L-1: a leading BOM no longer causes the first case_id to be skipped."""
+    inc_root = tmp_path / "inc"
+    suite_root = inc_root / "foo"
+    suite_root.mkdir(parents=True)
+    (suite_root / "cases.yaml").write_bytes(
+        b"\xef\xbb\xbffoo-01:\n  Implemented: true\nfoo-02:\n  Implemented: true\n"
+    )
+
+    assert load_active_case_ids("foo", inc_root) == ("foo-01", "foo-02")
+
+
+def test_load_error_codes_strips_leading_utf8_bom(tmp_path: Path) -> None:
+    """L-1: BOM tolerance also applies to errors.yaml."""
+    inc_root = tmp_path / "inc"
+    suite_root = inc_root / "foo"
+    suite_root.mkdir(parents=True)
+    (suite_root / "errors.yaml").write_bytes(
+        b"\xef\xbb\xbfFOO_ERROR_A:\n  Severity: ERROR\nFOO_ERROR_B:\n  Severity: WARNING\n"
+    )
+
+    assert load_error_codes("foo", inc_root) == {"FOO_ERROR_A", "FOO_ERROR_B"}
+
+
+def test_load_case_maturity_strips_leading_utf8_bom(tmp_path: Path) -> None:
+    """L-1: maturity rollup loader is also BOM-tolerant."""
+    inc_root = tmp_path / "inc"
+    suite_root = inc_root / "foo"
+    suite_root.mkdir(parents=True)
+    (suite_root / "cases.yaml").write_bytes(
+        b"\xef\xbb\xbffoo-01:\n  Maturity: GA\nfoo-02:\n  Maturity: BETA\n"
+    )
+
+    maturity = load_case_maturity("foo", repo_root=tmp_path)
+    assert maturity == {"foo-01": "GA", "foo-02": "BETA"}
+
+
 def test_load_active_case_ids_reads_top_level_keys(tmp_path: Path) -> None:
     inc_root = tmp_path / "inc"
     suite_root = inc_root / "foo"
