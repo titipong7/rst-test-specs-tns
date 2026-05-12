@@ -239,6 +239,23 @@ def _case_prefix(suite: str, case_id: str) -> str | None:
 
 
 _TOP_LEVEL_YAML_KEY = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):\s*$")
+_UTF8_BOM = "\ufeff"
+
+
+def _read_yaml_text(yaml_path: Path) -> str:
+    """Read a YAML file as UTF-8, stripping a leading BOM if present.
+
+    Editors configured with "Add BOM on save" emit ``\\ufeff`` at the head
+    of the file, which breaks the ``^[A-Za-z]`` anchor used by the
+    minimalist top-level key parser. Strip it defensively so the first
+    key is never silently dropped.
+    """
+    if not yaml_path.is_file():
+        return ""
+    text = yaml_path.read_text(encoding="utf-8")
+    if text.startswith(_UTF8_BOM):
+        text = text[len(_UTF8_BOM):]
+    return text
 
 
 def _read_top_level_keys(yaml_path: Path) -> list[str]:
@@ -249,10 +266,11 @@ def _read_top_level_keys(yaml_path: Path) -> list[str]:
     in this spec version. Avoids a runtime dependency on PyYAML so the
     dashboard runs in minimal CI images.
     """
-    if not yaml_path.is_file():
+    text = _read_yaml_text(yaml_path)
+    if not text:
         return []
     keys: list[str] = []
-    for raw_line in yaml_path.read_text(encoding="utf-8").splitlines():
+    for raw_line in text.splitlines():
         match = _TOP_LEVEL_YAML_KEY.match(raw_line)
         if match:
             keys.append(match.group(1))
@@ -270,12 +288,13 @@ def load_error_codes(suite: str, inc_root: Path) -> set[str]:
 
 
 def _read_case_maturity_from_yaml(yaml_path: Path) -> dict[str, str]:
-    if not yaml_path.is_file():
+    text = _read_yaml_text(yaml_path)
+    if not text:
         return {}
     out: dict[str, str] = {}
     current: str | None = None
     maturity_pattern = re.compile(r"^  Maturity:\s+(\S+)\s*$")
-    for raw_line in yaml_path.read_text(encoding="utf-8").splitlines():
+    for raw_line in text.splitlines():
         key = _TOP_LEVEL_YAML_KEY.match(raw_line)
         if key:
             current = key.group(1)
