@@ -459,6 +459,147 @@ def summarize_all_suite_coverage(
     return out
 
 
+_FIXTURE_SUFFIXES_TEXT_LIKE = {".txt", ".example"}
+
+
+def _fixture_parses(path: Path) -> bool:
+    """Return True if the fixture's payload parses with the format-appropriate loader."""
+    try:
+        body = path.read_bytes()
+    except OSError:
+        return False
+    if not body:
+        return False
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".xml":
+            ET.fromstring(body)
+            return True
+        if suffix == ".json":
+            json.loads(body.decode("utf-8"))
+            return True
+        if suffix == ".csv":
+            import csv
+
+            for _ in csv.reader(body.decode("utf-8").splitlines()):
+                pass
+            return True
+        if suffix in {".asc", ".gpg"}:
+            return b"-----BEGIN PGP" in body
+        # Fallback for `.ryde.example`, `.txt`, `.env.example`, etc.
+        return True
+    except (ET.ParseError, ValueError, UnicodeDecodeError):
+        return False
+
+
+def _fixture_iter(fixtures_root: Path, suite: str) -> list[Path]:
+    """Return every fixture file under a suite folder, sorted, ignoring README/dirs."""
+    suite_root = fixtures_root / suite
+    if not suite_root.is_dir():
+        return []
+    items: list[Path] = []
+    for path in suite_root.iterdir():
+        if not path.is_file():
+            continue
+        if path.name == "README.md":
+            continue
+        if path.suffix == ".md":
+            continue
+        items.append(path)
+    return sorted(items, key=lambda p: p.name)
+
+
+def _split_th_subfolder(fixtures_root: Path) -> list[tuple[str, Path]]:
+    """EPP fixtures live under `fixtures/epp/th/`; report that pair when present."""
+    pairs: list[tuple[str, Path]] = []
+    th_dir = fixtures_root / "epp" / "th"
+    if th_dir.is_dir():
+        pairs.append(("epp", th_dir))
+    return pairs
+
+
+def scan_fixture_inventory(
+    fixtures_root: Path,
+    suite: str,
+    *,
+    repo_root: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Inventory the on-disk fixtures for one suite, bucketed by case_id.
+
+    ``repo_root`` is consulted to read the suite's ``cases.yaml`` so the
+    inventory rows can be correlated with the spec's active case_ids; when
+    omitted it falls back to two parents up from ``fixtures_root`` (the
+    standard internal-rst-checker layout).
+    """
+    effective_repo_root = repo_root or fixtures_root.parent.parent
+    inc_root = effective_repo_root / "inc"
+
+    if suite == "epp":
+        epp_files: list[Path] = []
+        for _name, folder in _split_th_subfolder(fixtures_root):
+            epp_files.extend(
+                p for p in folder.iterdir() if p.is_file() and p.suffix != ".md"
+            )
+        files = sorted(epp_files, key=lambda p: p.name)
+    else:
+        files = _fixture_iter(fixtures_root, suite)
+    if not files:
+        return []
+
+    case_ids: tuple[str, ...] = (
+        EPP_CASE_IDS if suite == "epp" else load_active_case_ids(suite, inc_root)
+    )
+
+    by_prefix: dict[str, list[Path]] = {}
+    for fixture in files:
+        prefix = fixture.name[:2]
+        by_prefix.setdefault(prefix, []).append(fixture)
+
+    suite_rows: list[dict[str, Any]] = []
+    seen_prefixes: set[str] = set()
+    for case_id in case_ids:
+        prefix = _case_prefix(suite, case_id)
+        if not prefix:
+            continue
+        matched = sorted(by_prefix.get(prefix, []), key=lambda p: p.name)
+        seen_prefixes.add(prefix)
+        if not matched:
+            continue
+        suite_rows.append(
+            {
+                "caseId": case_id,
+                "files": [p.name for p in matched],
+                "parses": {p.name: _fixture_parses(p) for p in matched},
+            }
+        )
+    unmapped_files = [p for p in files if p.name[:2] not in seen_prefixes]
+    if unmapped_files:
+        suite_rows.append(
+            {
+                "caseId": None,
+                "files": [p.name for p in unmapped_files],
+                "parses": {p.name: _fixture_parses(p) for p in unmapped_files},
+            }
+        )
+    return suite_rows
+
+
+def summarize_fixture_inventory(
+    *,
+    fixtures_root: Path,
+    repo_root: Path,
+    suites: Sequence[str] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Run ``scan_fixture_inventory`` for every in-scope suite."""
+    target_suites = tuple(suites) if suites else DEFAULT_SUITES
+    inventory: dict[str, list[dict[str, Any]]] = {}
+    for suite in target_suites:
+        rows = scan_fixture_inventory(fixtures_root, suite, repo_root=repo_root)
+        if rows:
+            inventory[suite] = rows
+    return inventory
+
+
 def summarize_maturity_rollup(
     *,
     suite: str,
@@ -644,6 +785,7 @@ def build_summary(
     epp01_connectivity: dict[str, Any],
     suite_coverage: dict[str, Any] | None = None,
     maturity_summary: dict[str, Any] | None = None,
+    fixture_inventory: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "generatedAt": _now_iso(),
@@ -660,6 +802,7 @@ def build_summary(
         "etcRequirementCoverage": etc_requirement_coverage,
         "eppSuiteCoverage": epp_suite_coverage,
         "suiteCoverage": suite_coverage or {},
+        "fixtureInventory": fixture_inventory or {},
         "maturitySummary": maturity_summary or {},
         "epp01Connectivity": epp01_connectivity,
         "fipsCheck": fips_summary,
@@ -693,9 +836,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--suite",
         action="append",
         help=(
-            "Limit suiteCoverage / maturitySummary to the named suites. "
-            "Repeatable; default = every default suite with cases.yaml on disk."
+            "Limit suiteCoverage / fixtureInventory / maturitySummary to the "
+            "named suites. Repeatable; default = every default suite with "
+            "cases.yaml on disk."
         ),
+    )
+    parser.add_argument(
+        "--skip-fixtures",
+        action="store_true",
+        help="Skip the on-disk fixture inventory walk",
     )
     parser.add_argument("--dry-run", action="store_true", help="Prepare reports without running pytest")
     parser.add_argument("--live-epp01", action="store_true", help="Run live connectivity checks for epp-01")
@@ -779,6 +928,16 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
         case_results=case_results,
         suites=suites_filter,
     )
+    fixtures_root = paths.project_root / "fixtures"
+    fixture_inventory = (
+        {}
+        if args.skip_fixtures
+        else summarize_fixture_inventory(
+            fixtures_root=fixtures_root,
+            repo_root=paths.repo_root,
+            suites=suites_filter,
+        )
+    )
     maturity_summary = summarize_all_maturity(
         repo_root=paths.repo_root,
         suites=suites_filter,
@@ -796,6 +955,7 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
         fips_summary=fips_summary,
         epp01_connectivity=epp01_connectivity,
         suite_coverage=suite_coverage,
+        fixture_inventory=fixture_inventory,
         maturity_summary=maturity_summary,
     )
     write_report_files(
