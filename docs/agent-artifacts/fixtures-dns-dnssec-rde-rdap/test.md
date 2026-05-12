@@ -52,6 +52,7 @@
 | ------------ | ------------------------------------------------------------------------------------------------ | ---------------------------- |
 | `dns`        | `pytest internal-rst-checker/tests/dns/test_dns_fixtures_present.py -q`                          | 9 passed, 1 skip (no XML)    |
 | `dnssec`     | `pytest internal-rst-checker/tests/dnssec/test_dnssec_fixtures_present.py -q`                    | 11 passed, 1 skip (no XML)   |
+| `dnssec-ops` | `pytest internal-rst-checker/tests/dnssec_ops/test_dnssec_ops_fixtures_present.py -q`            | 11 passed, 1 skip (no XML)   |
 | `rde`        | `pytest internal-rst-checker/tests/rde/test_rde_fixtures_present.py -q`                          | 39 passed, 1 skip (no JSON)  |
 | `rdap`       | `pytest internal-rst-checker/tests/rdap/test_rdap_fixtures_present.py -q`                        | 32 passed, 1 skip (no XML)   |
 | `srsgw`      | `pytest internal-rst-checker/tests/srsgw/test_srsgw_fixtures_present.py -q`                      | 57 passed, 0 skip            |

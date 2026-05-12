@@ -33,9 +33,28 @@ next suite starts.
 | 6 | `47af21b` | `fixtures(idn): re-align to flat EPP-style layout`     |
 | 7 | `1c47b27` | `fixtures(integration): re-align to flat EPP-style layout` |
 | 8 | `b0d58b9` | `docs(fixtures): refresh top-level READMEs for flat layout` |
+| 9 | _follow-up_ | `fixtures(dnssec-ops): re-align to flat EPP-style layout` |
 
 Plus this build/test/review artifact triplet under
 `docs/agent-artifacts/fixtures-dns-dnssec-rde-rdap/`.
+
+### 2.1 DNSSEC-Ops follow-up (12 May 2026)
+
+DNSSEC-Ops was originally tagged as out-of-scope and left on
+per-case sub-folders. The follow-up commit re-aligns it to the same
+flat layout as the other seven suites:
+
+| Old path                                                 | New path                                  |
+| -------------------------------------------------------- | ----------------------------------------- |
+| `dnssec-ops/01-zsk-rollover/config.success.json`         | `dnssec-ops/01-zsk-rollover-success.json` |
+| `dnssec-ops/01-zsk-rollover/config.failure.json`         | `dnssec-ops/01-zsk-rollover-failure.json` |
+| `dnssec-ops/01-zsk-rollover/tsig.env.example`            | `dnssec-ops/01-zsk-rollover-tsig.env.example` |
+| `dnssec-ops/02-ksk-rollover/config.{success,failure}.json` | `dnssec-ops/02-ksk-rollover-{success,failure}.json` |
+| `dnssec-ops/03-algorithm-rollover/config.{success,failure}.json` | `dnssec-ops/03-algorithm-rollover-{success,failure}.json` |
+
+The DNSSEC-Ops guard test (`tests/dnssec_ops/test_dnssec_ops_fixtures_present.py`)
+is rewritten to the same flat-glob `ACTIVE_CASES` pattern used by every
+other suite (`("01", "02", "03")`).
 
 ## 3. Naming decisions (deviations from §3.3)
 

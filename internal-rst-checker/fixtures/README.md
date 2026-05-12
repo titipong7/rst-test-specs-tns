@@ -13,7 +13,7 @@ syntactic validity are enforced by guard tests under
 | EPP            | `epp/th/`        | `epp-01..21`, `epp-23..27` (active) + `epp-22` reference                                                                                                       | `tests/epp/test_epp_th_fixtures_present.py`                              |
 | DNS            | `dns/`           | `dns-zz-idna2008-compliance`, `dns-zz-consistency`                                                                                                              | `tests/dns/test_dns_fixtures_present.py`                                 |
 | DNSSEC         | `dnssec/`        | `dnssec-91`, `dnssec-92`, `dnssec-93`                                                                                                                            | `tests/dnssec/test_dnssec_fixtures_present.py`                           |
-| DNSSEC-Ops     | `dnssec-ops/`    | `dnssecOps01-ZSKRollover`, `dnssecOps02-KSKRollover`, `dnssecOps03-AlgorithmRollover` *(still on the per-case sub-folder layout — alignment tracked separately)* | `tests/dnssec_ops/test_dnssec_ops_fixtures_present.py`                   |
+| DNSSEC-Ops     | `dnssec-ops/`    | `dnssecOps01-ZSKRollover`, `dnssecOps02-KSKRollover`, `dnssecOps03-AlgorithmRollover`                                                                            | `tests/dnssec_ops/test_dnssec_ops_fixtures_present.py`                   |
 | RDE            | `rde/`           | `rde-01..14`                                                                                                                                                    | `tests/rde/test_rde_fixtures_present.py`                                 |
 | RDAP           | `rdap/`          | `rdap-01..10`, `rdap-91`, `rdap-92`                                                                                                                              | `tests/rdap/test_rdap_fixtures_present.py`                               |
 | SRSGW          | `srsgw/`         | `srsgw-01..06`, `srsgw-08..15` (`srsgw-07` was merged into `srsgw-06` upstream)                                                                                  | `tests/srsgw/test_srsgw_fixtures_present.py`                             |
@@ -22,16 +22,14 @@ syntactic validity are enforced by guard tests under
 
 ## Fixture conventions
 
-- **Flat EPP-style layout.** Every non-EPP suite (DNS, DNSSEC, RDE, RDAP,
-  SRSGW, IDN, Integration) now uses the same shape as the EPP template
-  at `fixtures/epp/th/`: a single root per suite, no sub-folders, files
-  named `<nn>-<slug>-<role>.<ext>` directly under the suite directory.
-  `<role>` is `success` / `failure` for the binary spec assertion, or a
-  descriptive token (`request`, `approve`, `gateway`, `primary`,
-  `create`, `update-domain`, …) for auxiliary artifacts.
-  - DNSSEC-Ops is the one exception: it still uses per-case sub-folders
-    pending its own alignment commit. It is tagged accordingly in the
-    table above.
+- **Flat EPP-style layout.** Every non-EPP suite (DNS, DNSSEC,
+  DNSSEC-Ops, RDE, RDAP, SRSGW, IDN, Integration) uses the same shape
+  as the EPP template at `fixtures/epp/th/`: a single root per suite,
+  no sub-folders, files named `<nn>-<slug>-<role>.<ext>` directly under
+  the suite directory. `<role>` is `success` / `failure` for the binary
+  spec assertion, or a descriptive token (`request`, `approve`,
+  `gateway`, `primary`, `create`, `update-domain`, `tsig`, …) for
+  auxiliary artifacts.
 - **Case prefix.** `<nn>` matches the spec case number (DNS / DNSSEC use
   zero-padded indices from `cases.yaml`; suites that already have spec
   numbers reuse them — `91`, `92`, `93` for DNSSEC; `91`, `92` for
