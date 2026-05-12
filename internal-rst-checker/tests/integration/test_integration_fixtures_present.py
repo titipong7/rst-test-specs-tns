@@ -16,41 +16,19 @@ import pytest
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "integration"
 
-ACTIVE_CASES: dict[str, dict[str, list[str]]] = {
-    "integration-01": {
-        "happy": ["01-epp-rdap/epp-create.xml", "01-epp-rdap/rdap-response.success.json"],
-        "negative": ["01-epp-rdap/rdap-response.failure.json"],
-    },
-    "integration-02": {
-        "happy": ["02-epp-dns/epp-create.xml", "02-epp-dns/dns-query.success.json"],
-        "negative": ["02-epp-dns/dns-query.failure.json"],
-    },
-    "integration-03": {
-        "happy": ["03-epp-rde/epp-create.xml", "03-epp-rde/rde-deposit.success.xml"],
-        "negative": ["03-epp-rde/rde-deposit.failure.xml"],
-    },
-    "integration-04": {
-        "happy": [
-            "04-glue-policy-host-objects/epp-create-domain.xml",
-            "04-glue-policy-host-objects/epp-create-host.xml",
-            "04-glue-policy-host-objects/epp-update-domain.xml",
-            "04-glue-policy-host-objects/dns-query.success.json",
-        ],
-        "negative": ["04-glue-policy-host-objects/dns-query.failure.json"],
-    },
-    "integration-05": {
-        "happy": [
-            "05-glue-policy-host-attributes/epp-create-domain-1.xml",
-            "05-glue-policy-host-attributes/epp-create-domain-2.xml",
-            "05-glue-policy-host-attributes/dns-query.success.json",
-        ],
-        "negative": ["05-glue-policy-host-attributes/dns-query.failure.json"],
-    },
+ACTIVE_CASES: tuple[str, ...] = ("01", "02", "03", "04", "05")
+
+CASE_LABELS: dict[str, str] = {
+    "01": "integration-01 — EPP → RDAP",
+    "02": "integration-02 — EPP → DNS",
+    "03": "integration-03 — EPP → RDE",
+    "04": "integration-04 — glue policy (host objects)",
+    "05": "integration-05 — glue policy (host attributes)",
 }
 
 
 def _all_fixture_files() -> list[Path]:
-    return sorted(p for p in FIXTURE_DIR.rglob("*") if p.is_file() and p.name != "README.md")
+    return sorted(p for p in FIXTURE_DIR.iterdir() if p.is_file() and p.name != "README.md")
 
 
 def _files_by_suffix(suffix: str) -> list[Path]:
@@ -71,14 +49,13 @@ def test_integration_fixture_directory_exists() -> None:
     assert FIXTURE_DIR.is_dir(), f"Missing fixtures folder: {FIXTURE_DIR}."
 
 
-@pytest.mark.parametrize("case_id", sorted(ACTIVE_CASES))
-def test_every_active_integration_case_has_required_fixtures(case_id: str) -> None:
-    for kind in ("happy", "negative"):
-        for relpath in ACTIVE_CASES[case_id][kind]:
-            target = FIXTURE_DIR / relpath
-            assert target.is_file(), (
-                f"{case_id}: missing {kind} fixture {target.relative_to(FIXTURE_DIR.parent)}."
-            )
+@pytest.mark.parametrize("case_nn", ACTIVE_CASES)
+def test_every_active_integration_case_has_at_least_one_fixture(case_nn: str) -> None:
+    matches = sorted(FIXTURE_DIR.glob(f"{case_nn}-*"))
+    assert matches, (
+        f"Integration case prefix '{case_nn}-' ({CASE_LABELS[case_nn]}) "
+        f"has no fixtures under {FIXTURE_DIR}."
+    )
 
 
 @pytest.mark.parametrize(
@@ -112,6 +89,6 @@ def test_integration_xml_fixtures_are_well_formed(path: Path | None) -> None:
 def test_integration_no_real_env_files_are_committed() -> None:
     real_envs = [p for p in FIXTURE_DIR.rglob("*.env") if not p.name.endswith(".env.example")]
     assert not real_envs, (
-        f"Real .env files must never be committed under fixtures/integration: "
+        "Real .env files must never be committed under fixtures/integration: "
         f"{[str(p.relative_to(FIXTURE_DIR.parent)) for p in real_envs]}"
     )

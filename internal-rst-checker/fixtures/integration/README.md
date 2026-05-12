@@ -4,9 +4,12 @@ End-to-end driver samples for the `integration` test suite from
 `inc/integration/cases.yaml` (ICANN RST `v2026.04`). Each case ships:
 
 - the EPP transform that triggers the integration check
-  (`epp-create*.xml`, `epp-update-domain.xml`), and
+  (`*-create*.xml`, `*-update-domain.xml`), and
 - the expected downstream observation (RDAP / DNS / RDE) for both the
   happy and SLA-breach paths.
+
+Layout follows the flat EPP template (`<nn>-<slug>-{success,failure,
+create,update-domain}.<ext>` directly under this folder).
 
 ## Connection template
 
@@ -22,22 +25,27 @@ Use `integration.env.example` as your local template:
 - `INTEGRATION_HOST_MODEL` — `objects` vs. `attributes` decides which
   glue-policy case applies.
 
+The scoped `03-epp-rde-sftp.env.example` documents the additional SFTP
+inputs needed for `integration-03` (`INTEGRATION_RDE_SFTP_HOSTNAME`,
+`…USERNAME`, `…DIRECTORY`, `…PUBLIC_KEY_PATH`).
+
 Do not commit real credentials. `*.env` files inside
 `internal-rst-checker/fixtures/**` are git-ignored; only `*.env.example`
 templates are tracked.
 
 ## Fixture files (per test case)
 
-| Spec case        | Inputs (EPP frame(s))                                                                                | Expected observation (happy)                                  | Expected observation (failure)                                  | Notes                                                                                  |
-| ---------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `integration-01` | `01-epp-rdap/epp-create.xml`                                                                          | `01-epp-rdap/rdap-response.success.json`                      | `01-epp-rdap/rdap-response.failure.json`                         | RDAP visibility within 1 hour of `<crDate>`.                                           |
-| `integration-02` | `02-epp-dns/epp-create.xml`                                                                           | `02-epp-dns/dns-query.success.json`                           | `02-epp-dns/dns-query.failure.json`                              | DNS resolution within 1 hour of `<crDate>`.                                            |
-| `integration-03` | `03-epp-rde/epp-create.xml`                                                                           | `03-epp-rde/rde-deposit.success.xml`                          | `03-epp-rde/rde-deposit.failure.xml`                             | Domain must appear in next deposit within 24h. `sftp.env.example` documents inputs.    |
-| `integration-04` | `04-glue-policy-host-objects/{epp-create-domain,epp-create-host,epp-update-domain}.xml`              | `04-glue-policy-host-objects/dns-query.success.json`          | `04-glue-policy-host-objects/dns-query.failure.json`             | Skipped unless `dns.gluePolicy=narrow` and `epp.hostModel=objects`.                    |
-| `integration-05` | `05-glue-policy-host-attributes/{epp-create-domain-1,epp-create-domain-2}.xml`                       | `05-glue-policy-host-attributes/dns-query.success.json`       | `05-glue-policy-host-attributes/dns-query.failure.json`          | Skipped unless `dns.gluePolicy=narrow` and `epp.hostModel=attributes`.                 |
+| Spec case        | Inputs (EPP frame(s))                                                                                  | Expected observation (happy)                  | Expected observation (failure)                | Notes                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `integration-01` | `01-epp-rdap-create.xml`                                                                               | `01-epp-rdap-success.json`                    | `01-epp-rdap-failure.json`                    | RDAP visibility within 1 hour of `<crDate>`.                                           |
+| `integration-02` | `02-epp-dns-create.xml`                                                                                | `02-epp-dns-success.json`                     | `02-epp-dns-failure.json`                     | DNS resolution within 1 hour of `<crDate>`.                                            |
+| `integration-03` | `03-epp-rde-create.xml`                                                                                | `03-epp-rde-success.xml`                      | `03-epp-rde-failure.xml`                      | Domain must appear in next deposit within 24h. `03-epp-rde-sftp.env.example` documents the additional SFTP inputs. |
+| `integration-04` | `04-glue-host-objects-create-domain.xml`, `04-glue-host-objects-create-host.xml`, `04-glue-host-objects-update-domain.xml` | `04-glue-host-objects-success.json` | `04-glue-host-objects-failure.json` | Skipped unless `dns.gluePolicy=narrow` and `epp.hostModel=objects`.                    |
+| `integration-05` | `05-glue-host-attributes-create-domain-1.xml`, `05-glue-host-attributes-create-domain-2.xml`           | `05-glue-host-attributes-success.json`        | `05-glue-host-attributes-failure.json`        | Skipped unless `dns.gluePolicy=narrow` and `epp.hostModel=attributes`.                 |
 
-`tests/integration/test_integration_fixtures_present.py` enforces presence and
-syntactic validity for every active spec case.
+`tests/integration/test_integration_fixtures_present.py` enforces
+presence and syntactic validity for every active spec case prefix
+(`01-` … `05-`).
 
 ## Placeholder conventions
 
