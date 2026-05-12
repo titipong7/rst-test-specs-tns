@@ -17,7 +17,20 @@ from rst_compliance.epp_connectivity import Epp01ProbeConfig, run_epp01_connecti
 from rst_compliance.fips_check import check_hsm_fips_140_3_mode
 
 SPEC_REFERENCE = "ICANN RST v2026.04"
-CASE_ID_PATTERN = re.compile(r"\b(?:dns|rdap|epp|rde|idn|srsgw|integration|minimumRPMs)-\d+\b", re.IGNORECASE)
+
+CASE_ID_PATTERN: re.Pattern[str] = re.compile(
+    r"\b(?:dns|dnssec|rdap|epp|rde|srsgw|idn|integration)"
+    r"-(?:zz-[a-z0-9-]+|\d+)\b",
+    re.IGNORECASE,
+)
+CASE_ID_PATTERNS: tuple[re.Pattern[str], ...] = (CASE_ID_PATTERN,)
+
+
+def _extract_case_ids(text: str) -> set[str]:
+    return {match for match in CASE_ID_PATTERN.findall(text)}
+
+
+
 ETC_REQUIREMENTS = (
     {
         "id": "etc-index-links",
@@ -91,10 +104,10 @@ def map_spec_criteria(*, tests_root: Path, modules: Sequence[str] | None = None)
         parsed = ast.parse(source)
         for node in parsed.body:
             if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
-                labels = set(CASE_ID_PATTERN.findall(node.name))
+                labels = _extract_case_ids(node.name)
                 docstring = ast.get_docstring(node)
                 if docstring:
-                    labels.update(CASE_ID_PATTERN.findall(docstring))
+                    labels.update(_extract_case_ids(docstring))
                 mappings.append(
                     {
                         "testName": node.name,
