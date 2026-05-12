@@ -1,0 +1,7 @@
+{
+  "objectClassName": "nameserver",
+  "ldhName": "ns1.example.example",
+  "ipAddresses": {
+    "v4": ["999.999.999.999"]
+  }
+}

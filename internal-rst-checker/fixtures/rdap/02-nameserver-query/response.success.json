@@ -1,0 +1,17 @@
+{
+  "rdapConformance": ["rdap_level_0"],
+  "objectClassName": "nameserver",
+  "handle": "H0000001-EXAMPLE",
+  "ldhName": "ns1.example.example",
+  "status": ["active"],
+  "ipAddresses": {
+    "v4": ["192.0.2.10"],
+    "v6": ["2001:db8::53:10"]
+  },
+  "links": [
+    {"value": "https://rdap.example/example/nameserver/ns1.example.example",
+     "rel": "self",
+     "href": "https://rdap.example/example/nameserver/ns1.example.example",
+     "type": "application/rdap+json"}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "rdapConformance": ["rdap_level_0"],
+  "objectClassName": "entity",
+  "handle": "9995",
+  "roles": ["registrar"],
+  "publicIds": [
+    {"type": "IANA Registrar ID", "identifier": "9995"}
+  ],
+  "vcardArray": [
+    "vcard",
+    [
+      ["version", {}, "text", "4.0"],
+      ["fn", {}, "text", "Example Registrar Inc."],
+      ["adr", {}, "text", ["", "", "1 Example Way", "Bangkok", "", "10000", "TH"]],
+      ["email", {}, "text", "ops@example.example"]
+    ]
+  ]
+}

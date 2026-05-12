@@ -1,0 +1,3 @@
+HEAD /entity/9995 HTTP/1.1
+Host: rdap.example
+Accept: application/rdap+json

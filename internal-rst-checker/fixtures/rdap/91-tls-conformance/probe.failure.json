@@ -1,0 +1,22 @@
+{
+  "host": "rdap.example",
+  "ports": [443],
+  "ipAddresses": ["192.0.2.80"],
+  "tlsVersionsSupported": ["TLSv1.0", "TLSv1.1", "TLSv1.2"],
+  "tlsVersionsForbidden": ["TLSv1.0", "TLSv1.1"],
+  "certificate": {
+    "trusted": false,
+    "expired": true,
+    "chainComplete": false,
+    "subjectAltNames": ["other.example"]
+  },
+  "ciphers": ["TLS_RSA_WITH_3DES_EDE_CBC_SHA"],
+  "expectedFindings": [
+    "RDAP_TLS_FORBIDDEN_PROTOCOL_SUPPORTED",
+    "RDAP_TLS_UNTRUSTED_CERTIFICATE",
+    "RDAP_TLS_EXPIRED_CERTIFICATE",
+    "RDAP_TLS_CERTIFICATE_CHAIN_MISSING",
+    "RDAP_TLS_CERTIFICATE_HOSTNAME_MISMATCH",
+    "RDAP_TLS_BAD_CIPHER"
+  ]
+}

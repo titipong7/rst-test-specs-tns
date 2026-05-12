@@ -1,0 +1,18 @@
+{
+  "host": "rdap.example",
+  "ports": [443],
+  "ipAddresses": ["192.0.2.80", "2001:db8::443:1"],
+  "tlsVersionsSupported": ["TLSv1.2", "TLSv1.3"],
+  "tlsVersionsForbidden": [],
+  "certificate": {
+    "trusted": true,
+    "expired": false,
+    "chainComplete": true,
+    "subjectAltNames": ["rdap.example", "*.rdap.example"]
+  },
+  "ciphers": [
+    "TLS_AES_128_GCM_SHA256",
+    "TLS_AES_256_GCM_SHA384",
+    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+  ]
+}

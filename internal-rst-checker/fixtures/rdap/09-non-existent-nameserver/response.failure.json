@@ -1,0 +1,5 @@
+{
+  "errorCode": 500,
+  "title": "Internal Server Error",
+  "description": ["Server returned 500 instead of 404 for a non-existent nameserver."]
+}

@@ -1,0 +1,8 @@
+{
+  "rdapConformance": ["rdap_level_0"],
+  "objectClassName": "domain",
+  "ldhName": "example.example",
+  "events": [
+    {"eventDate": "not-a-date"}
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "errorCode": 200,
+  "title": "OK",
+  "description": ["Server incorrectly returned 200 for a non-existent domain."]
+}

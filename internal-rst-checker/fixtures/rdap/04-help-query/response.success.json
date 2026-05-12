@@ -1,0 +1,7 @@
+{
+  "rdapConformance": ["rdap_level_0"],
+  "notices": [
+    {"title": "Terms of Service",
+     "description": ["Synthetic help response used for fixture purposes only."]}
+  ]
+}
