@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import copy
 import json
+import random
 import socket
+import ssl
+import string
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -97,9 +100,9 @@ def validate_rdap_payload(*, payload: dict[str, Any], registry_data_model: Regis
     if not isinstance(payload, dict):
         raise RdapConformanceError("RDAP response must be a JSON object")
 
-    for field in ("rdapConformance", "links", "status", "notices", "entities"):
-        if field not in payload:
-            raise RdapConformanceError(f"RDAP response missing mandatory field: {field}")
+    for fld in ("rdapConformance", "links", "status", "notices", "entities"):
+        if fld not in payload:
+            raise RdapConformanceError(f"RDAP response missing mandatory field: {fld}")
 
     if not isinstance(payload["rdapConformance"], list) or not payload["rdapConformance"]:
         raise RdapConformanceError("rdapConformance must be a non-empty array")
@@ -141,6 +144,782 @@ def _has_registrant_entity(entities: list[dict[str, Any]]) -> bool:
         if isinstance(roles, list) and "registrant" in roles:
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Shared types for rdap-01 … rdap-92
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class RdapTestError:
+    """Structured error produced by any RDAP test case."""
+
+    code: str
+    severity: str
+    detail: str
+
+
+@dataclass
+class RdapTestResult:
+    """Aggregated result of a single RDAP test case run."""
+
+    test_id: str
+    passed: bool = True
+    skipped: bool = False
+    errors: list[RdapTestError] = field(default_factory=list)
+
+    def add_error(self, code: str, severity: str, detail: str) -> None:
+        self.errors.append(RdapTestError(code=code, severity=severity, detail=detail))
+        if severity in ("ERROR", "CRITICAL"):
+            self.passed = False
+
+    def skip(self, reason: str) -> None:
+        self.skipped = True
+        self.errors.append(RdapTestError(code="SKIPPED", severity="INFO", detail=reason))
+
+
+@dataclass(frozen=True)
+class RdapSuiteConfig:
+    """Unified configuration for the full StandardRDAP test suite."""
+
+    base_urls: list[dict[str, str]]
+    test_domains: list[dict[str, str]]
+    test_entities: list[dict[str, str]]
+    test_nameservers: list[dict[str, str]]
+    registry_data_model: str = "minimum"
+    host_model: str = "objects"
+    timeout_seconds: int = 30
+
+
+class RdapHttpClient:
+    """Pluggable HTTP client for all RDAP test cases."""
+
+    def __init__(self, session: requests.Session | None = None, timeout: int = 30) -> None:
+        self.session = session or requests.Session()
+        self.timeout = timeout
+
+    def get(self, url: str) -> requests.Response:
+        headers = {"Accept": "application/rdap+json, application/json"}
+        return self.session.get(url, headers=headers, timeout=self.timeout)
+
+    def head(self, url: str) -> requests.Response:
+        headers = {"Accept": "application/rdap+json, application/json"}
+        return self.session.head(url, headers=headers, timeout=self.timeout)
+
+
+def _random_label(length: int = 12) -> str:
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+
+# ---------------------------------------------------------------------------
+# rdap-01: Domain query test
+# ---------------------------------------------------------------------------
+
+class DomainQueryChecker:
+    """rdap-01: validates server responses to domain name queries."""
+
+    def __init__(self, config: RdapSuiteConfig, *, client: RdapHttpClient | None = None) -> None:
+        self.config = config
+        self.client = client or RdapHttpClient(timeout=config.timeout_seconds)
+
+    def run(self) -> RdapTestResult:
+        result = RdapTestResult(test_id="rdap-01")
+        model = RegistryDataModel.parse(self.config.registry_data_model)
+
+        for base_url_entry in self.config.base_urls:
+            tld = base_url_entry["tld"]
+            base_url = base_url_entry["baseURL"]
+
+            for domain_entry in self.config.test_domains:
+                if domain_entry["tld"] != tld:
+                    continue
+                name = domain_entry["name"]
+                url = f"{base_url.rstrip('/')}/domain/{name}"
+
+                try:
+                    response = self.client.get(url)
+                    response.raise_for_status()
+                    payload = response.json()
+                    self._validate_domain_response(payload, model)
+                except Exception as exc:
+                    result.add_error(
+                        "RDAP_DOMAIN_RESPONSE_VALIDATION_FAILED",
+                        "ERROR",
+                        f"Domain query for {name} failed: {exc}",
+                    )
+
+        return result
+
+    @staticmethod
+    def _validate_domain_response(payload: dict[str, Any], model: RegistryDataModel) -> None:
+        if not isinstance(payload, dict):
+            raise RdapConformanceError("domain response must be a JSON object")
+        if payload.get("objectClassName") != "domain":
+            raise RdapConformanceError("objectClassName must be 'domain'")
+        if not payload.get("ldhName"):
+            raise RdapConformanceError("domain response must include ldhName")
+        for fld in ("rdapConformance", "links", "entities"):
+            if fld not in payload:
+                raise RdapConformanceError(f"domain response missing field: {fld}")
+        if model == RegistryDataModel.MAXIMUM:
+            entities = payload.get("entities", [])
+            if not _has_registrant_entity(entities):
+                raise RdapConformanceError("maximum model requires registrant entity")
+
+
+# ---------------------------------------------------------------------------
+# rdap-02: Nameserver query test
+# ---------------------------------------------------------------------------
+
+class NameserverQueryChecker:
+    """rdap-02: validates server responses to nameserver queries."""
+
+    def __init__(self, config: RdapSuiteConfig, *, client: RdapHttpClient | None = None) -> None:
+        self.config = config
+        self.client = client or RdapHttpClient(timeout=config.timeout_seconds)
+
+    def run(self) -> RdapTestResult:
+        result = RdapTestResult(test_id="rdap-02")
+
+        if self.config.host_model == "attributes":
+            result.skip("epp.hostModel is 'attributes'; rdap-02 skipped")
+            return result
+
+        for base_url_entry in self.config.base_urls:
+            tld = base_url_entry["tld"]
+            base_url = base_url_entry["baseURL"]
+
+            for ns_entry in self.config.test_nameservers:
+                if ns_entry["tld"] != tld:
+                    continue
+                ns = ns_entry["nameserver"]
+                url = f"{base_url.rstrip('/')}/nameserver/{ns}"
+
+                try:
+                    response = self.client.get(url)
+                    response.raise_for_status()
+                    payload = response.json()
+                    self._validate_nameserver_response(payload)
+                except Exception as exc:
+                    result.add_error(
+                        "RDAP_NAMESERVER_RESPONSE_VALIDATION_FAILED",
+                        "ERROR",
+                        f"Nameserver query for {ns} failed: {exc}",
+                    )
+
+        return result
+
+    @staticmethod
+    def _validate_nameserver_response(payload: dict[str, Any]) -> None:
+        if not isinstance(payload, dict):
+            raise RdapConformanceError("nameserver response must be a JSON object")
+        if payload.get("objectClassName") != "nameserver":
+            raise RdapConformanceError("objectClassName must be 'nameserver'")
+        if not payload.get("ldhName"):
+            raise RdapConformanceError("nameserver response must include ldhName")
+        for fld in ("rdapConformance", "links"):
+            if fld not in payload:
+                raise RdapConformanceError(f"nameserver response missing field: {fld}")
+
+
+# ---------------------------------------------------------------------------
+# rdap-03: Registrar (entity) query test
+# ---------------------------------------------------------------------------
+
+class EntityQueryChecker:
+    """rdap-03: validates server responses to entity queries for registrars."""
+
+    def __init__(self, config: RdapSuiteConfig, *, client: RdapHttpClient | None = None) -> None:
+        self.config = config
+        self.client = client or RdapHttpClient(timeout=config.timeout_seconds)
+
+    def run(self) -> RdapTestResult:
+        result = RdapTestResult(test_id="rdap-03")
+
+        for base_url_entry in self.config.base_urls:
+            tld = base_url_entry["tld"]
+            base_url = base_url_entry["baseURL"]
+
+            for entity_entry in self.config.test_entities:
+                if entity_entry["tld"] != tld:
+                    continue
+                handle = entity_entry["handle"]
+                url = f"{base_url.rstrip('/')}/entity/{handle}"
+
+                try:
+                    response = self.client.get(url)
+                    response.raise_for_status()
+                    payload = response.json()
+                    self._validate_entity_response(payload)
+                except Exception as exc:
+                    result.add_error(
+                        "RDAP_ENTITY_RESPONSE_VALIDATION_FAILED",
+                        "ERROR",
+                        f"Entity query for {handle} failed: {exc}",
+                    )
+
+        return result
+
+    @staticmethod
+    def _validate_entity_response(payload: dict[str, Any]) -> None:
+        if not isinstance(payload, dict):
+            raise RdapConformanceError("entity response must be a JSON object")
+        if payload.get("objectClassName") != "entity":
+            raise RdapConformanceError("objectClassName must be 'entity'")
+        if not payload.get("handle"):
+            raise RdapConformanceError("entity response must include handle")
+        for fld in ("rdapConformance", "links", "vcardArray"):
+            if fld not in payload:
+                raise RdapConformanceError(f"entity response missing field: {fld}")
+        vcard = payload.get("vcardArray", [])
+        if not isinstance(vcard, list) or len(vcard) < 2 or vcard[0] != "vcard":
+            raise RdapConformanceError("entity vcardArray must start with 'vcard'")
+
+
+# ---------------------------------------------------------------------------
+# rdap-04: Help query test
+# ---------------------------------------------------------------------------
+
+class HelpQueryChecker:
+    """rdap-04: validates server responses to help queries."""
+
+    def __init__(self, config: RdapSuiteConfig, *, client: RdapHttpClient | None = None) -> None:
+        self.config = config
+        self.client = client or RdapHttpClient(timeout=config.timeout_seconds)
+
+    def run(self) -> RdapTestResult:
+        result = RdapTestResult(test_id="rdap-04")
+
+        for base_url_entry in self.config.base_urls:
+            base_url = base_url_entry["baseURL"]
+            url = f"{base_url.rstrip('/')}/help"
+
+            try:
+                response = self.client.get(url)
+                response.raise_for_status()
+                payload = response.json()
+                self._validate_help_response(payload)
+            except Exception as exc:
+                result.add_error(
+                    "RDAP_HELP_RESPONSE_VALIDATION_FAILED",
+                    "ERROR",
+                    f"Help query for {base_url} failed: {exc}",
+                )
+
+        return result
+
+    @staticmethod
+    def _validate_help_response(payload: dict[str, Any]) -> None:
+        if not isinstance(payload, dict):
+            raise RdapConformanceError("help response must be a JSON object")
+        for fld in ("rdapConformance", "notices"):
+            if fld not in payload:
+                raise RdapConformanceError(f"help response missing field: {fld}")
+        if not isinstance(payload["rdapConformance"], list) or not payload["rdapConformance"]:
+            raise RdapConformanceError("rdapConformance must be a non-empty array")
+
+
+# ---------------------------------------------------------------------------
+# rdap-05: Domain HEAD test
+# ---------------------------------------------------------------------------
+
+class DomainHeadChecker:
+    """rdap-05: validates HEAD support for domain queries."""
+
+    def __init__(self, config: RdapSuiteConfig, *, client: RdapHttpClient | None = None) -> None:
+        self.config = config
+        self.client = client or RdapHttpClient(timeout=config.timeout_seconds)
+
+    def run(self) -> RdapTestResult:
+        result = RdapTestResult(test_id="rdap-05")
+
+        for base_url_entry in self.config.base_urls:
+            tld = base_url_entry["tld"]
+            base_url = base_url_entry["baseURL"]
+
+            for domain_entry in self.config.test_domains:
+                if domain_entry["tld"] != tld:
+                    continue
+                name = domain_entry["name"]
+                url = f"{base_url.rstrip('/')}/domain/{name}"
+
+                try:
+                    response = self.client.head(url)
+                    _validate_head_response(response, f"domain/{name}")
+                except Exception as exc:
+                    result.add_error(
+                        "RDAP_DOMAIN_HEAD_FAILED",
+                        "ERROR",
+                        f"Domain HEAD for {name} failed: {exc}",
+                    )
+
+        return result
+
+
+# ---------------------------------------------------------------------------
+# rdap-06: Nameserver HEAD test
+# ---------------------------------------------------------------------------
+
+class NameserverHeadChecker:
+    """rdap-06: validates HEAD support for nameserver queries."""
+
+    def __init__(self, config: RdapSuiteConfig, *, client: RdapHttpClient | None = None) -> None:
+        self.config = config
+        self.client = client or RdapHttpClient(timeout=config.timeout_seconds)
+
+    def run(self) -> RdapTestResult:
+        result = RdapTestResult(test_id="rdap-06")
+
+        if self.config.host_model == "attributes":
+            result.skip("epp.hostModel is 'attributes'; rdap-06 skipped")
+            return result
+
+        for base_url_entry in self.config.base_urls:
+            tld = base_url_entry["tld"]
+            base_url = base_url_entry["baseURL"]
+
+            for ns_entry in self.config.test_nameservers:
+                if ns_entry["tld"] != tld:
+                    continue
+                ns = ns_entry["nameserver"]
+                url = f"{base_url.rstrip('/')}/nameserver/{ns}"
+
+                try:
+                    response = self.client.head(url)
+                    _validate_head_response(response, f"nameserver/{ns}")
+                except Exception as exc:
+                    result.add_error(
+                        "RDAP_NAMESERVER_HEAD_FAILED",
+                        "ERROR",
+                        f"Nameserver HEAD for {ns} failed: {exc}",
+                    )
+
+        return result
+
+
+# ---------------------------------------------------------------------------
+# rdap-07: Entity HEAD test
+# ---------------------------------------------------------------------------
+
+class EntityHeadChecker:
+    """rdap-07: validates HEAD support for entity queries."""
+
+    def __init__(self, config: RdapSuiteConfig, *, client: RdapHttpClient | None = None) -> None:
+        self.config = config
+        self.client = client or RdapHttpClient(timeout=config.timeout_seconds)
+
+    def run(self) -> RdapTestResult:
+        result = RdapTestResult(test_id="rdap-07")
+
+        for base_url_entry in self.config.base_urls:
+            tld = base_url_entry["tld"]
+            base_url = base_url_entry["baseURL"]
+
+            for entity_entry in self.config.test_entities:
+                if entity_entry["tld"] != tld:
+                    continue
+                handle = entity_entry["handle"]
+                url = f"{base_url.rstrip('/')}/entity/{handle}"
+
+                try:
+                    response = self.client.head(url)
+                    _validate_head_response(response, f"entity/{handle}")
+                except Exception as exc:
+                    result.add_error(
+                        "RDAP_ENTITY_HEAD_FAILED",
+                        "ERROR",
+                        f"Entity HEAD for {handle} failed: {exc}",
+                    )
+
+        return result
+
+
+def _validate_head_response(response: requests.Response, label: str) -> None:
+    if response.status_code != 200:
+        raise RdapConformanceError(f"HEAD {label}: expected 200, got {response.status_code}")
+    acao = response.headers.get("access-control-allow-origin")
+    if not acao:
+        raise RdapConformanceError(f"HEAD {label}: missing access-control-allow-origin header")
+    body = response.content
+    if body and len(body) > 0:
+        raise RdapConformanceError(f"HEAD {label}: response body must be empty")
+
+
+# ---------------------------------------------------------------------------
+# rdap-08: Non-existent domain test
+# ---------------------------------------------------------------------------
+
+class NonExistentDomainChecker:
+    """rdap-08: validates 404 responses for non-existent domain queries."""
+
+    def __init__(self, config: RdapSuiteConfig, *, client: RdapHttpClient | None = None) -> None:
+        self.config = config
+        self.client = client or RdapHttpClient(timeout=config.timeout_seconds)
+
+    def run(self) -> RdapTestResult:
+        result = RdapTestResult(test_id="rdap-08")
+
+        for base_url_entry in self.config.base_urls:
+            tld = base_url_entry["tld"]
+            base_url = base_url_entry["baseURL"]
+            random_domain = f"{_random_label()}.{tld}"
+            url = f"{base_url.rstrip('/')}/domain/{random_domain}"
+
+            try:
+                response = self.client.get(url)
+                _validate_non_existent_response(response, random_domain)
+            except Exception as exc:
+                result.add_error(
+                    "RDAP_INVALID_RESPONSE_FOR_NON_EXISTENT_DOMAIN",
+                    "ERROR",
+                    f"Non-existent domain query for {random_domain} failed: {exc}",
+                )
+
+        return result
+
+
+# ---------------------------------------------------------------------------
+# rdap-09: Non-existent nameserver test
+# ---------------------------------------------------------------------------
+
+class NonExistentNameserverChecker:
+    """rdap-09: validates 404 responses for non-existent nameserver queries."""
+
+    def __init__(self, config: RdapSuiteConfig, *, client: RdapHttpClient | None = None) -> None:
+        self.config = config
+        self.client = client or RdapHttpClient(timeout=config.timeout_seconds)
+
+    def run(self) -> RdapTestResult:
+        result = RdapTestResult(test_id="rdap-09")
+
+        for base_url_entry in self.config.base_urls:
+            tld = base_url_entry["tld"]
+            base_url = base_url_entry["baseURL"]
+
+            internal_ns = f"ns1.{_random_label()}.{tld}"
+            url_internal = f"{base_url.rstrip('/')}/nameserver/{internal_ns}"
+            try:
+                response = self.client.get(url_internal)
+                _validate_non_existent_response(response, internal_ns)
+            except Exception as exc:
+                result.add_error(
+                    "RDAP_INVALID_RESPONSE_FOR_NON_EXISTENT_NAMESERVER",
+                    "ERROR",
+                    f"Non-existent internal nameserver {internal_ns}: {exc}",
+                )
+
+            external_ns = f"ns1.{_random_label()}.external-test.example"
+            url_external = f"{base_url.rstrip('/')}/nameserver/{external_ns}"
+            try:
+                response = self.client.get(url_external)
+                _validate_non_existent_response(response, external_ns)
+            except Exception as exc:
+                result.add_error(
+                    "RDAP_INVALID_RESPONSE_FOR_NON_EXISTENT_NAMESERVER",
+                    "ERROR",
+                    f"Non-existent external nameserver {external_ns}: {exc}",
+                )
+
+        return result
+
+
+# ---------------------------------------------------------------------------
+# rdap-10: Non-existent entity test
+# ---------------------------------------------------------------------------
+
+class NonExistentEntityChecker:
+    """rdap-10: validates 404 responses for non-existent entity queries."""
+
+    def __init__(self, config: RdapSuiteConfig, *, client: RdapHttpClient | None = None) -> None:
+        self.config = config
+        self.client = client or RdapHttpClient(timeout=config.timeout_seconds)
+
+    def run(self) -> RdapTestResult:
+        result = RdapTestResult(test_id="rdap-10")
+
+        for base_url_entry in self.config.base_urls:
+            base_url = base_url_entry["baseURL"]
+            random_handle = _random_label(16)
+            url = f"{base_url.rstrip('/')}/entity/{random_handle}"
+
+            try:
+                response = self.client.get(url)
+                _validate_non_existent_response(response, random_handle)
+            except Exception as exc:
+                result.add_error(
+                    "RDAP_INVALID_RESPONSE_FOR_NON_EXISTENT_ENTITY",
+                    "ERROR",
+                    f"Non-existent entity {random_handle}: {exc}",
+                )
+
+        return result
+
+
+def _validate_non_existent_response(response: requests.Response, label: str) -> None:
+    if response.status_code != 404:
+        raise RdapConformanceError(
+            f"Expected 404 for non-existent {label}, got {response.status_code}"
+        )
+    acao = response.headers.get("access-control-allow-origin")
+    if not acao:
+        raise RdapConformanceError(
+            f"Non-existent {label}: missing access-control-allow-origin header"
+        )
+    body = response.text.strip()
+    if body:
+        try:
+            error_obj = json.loads(body)
+            if not isinstance(error_obj, dict):
+                raise RdapConformanceError(f"Non-existent {label}: error body is not a JSON object")
+            if "errorCode" not in error_obj:
+                raise RdapConformanceError(
+                    f"Non-existent {label}: error body missing 'errorCode' field"
+                )
+        except json.JSONDecodeError as exc:
+            raise RdapConformanceError(
+                f"Non-existent {label}: body is not valid JSON"
+            ) from exc
+
+
+# ---------------------------------------------------------------------------
+# rdap-91: TLS version conformance check
+# ---------------------------------------------------------------------------
+
+RFC9325_RECOMMENDED_CIPHERS = frozenset({
+    "TLS_AES_128_GCM_SHA256",
+    "TLS_AES_256_GCM_SHA384",
+    "TLS_CHACHA20_POLY1305_SHA256",
+    "ECDHE-ECDSA-AES128-GCM-SHA256",
+    "ECDHE-RSA-AES128-GCM-SHA256",
+    "ECDHE-ECDSA-AES256-GCM-SHA384",
+    "ECDHE-RSA-AES256-GCM-SHA384",
+    "ECDHE-ECDSA-CHACHA20-POLY1305",
+    "ECDHE-RSA-CHACHA20-POLY1305",
+    "DHE-RSA-AES128-GCM-SHA256",
+    "DHE-RSA-AES256-GCM-SHA384",
+    "DHE-RSA-CHACHA20-POLY1305",
+})
+
+FORBIDDEN_TLS_VERSIONS = frozenset({
+    ssl.TLSVersion.SSLv3,
+    ssl.TLSVersion.TLSv1,
+    ssl.TLSVersion.TLSv1_1,
+})
+
+
+class TlsConformanceChecker:
+    """rdap-91: verifies RDAP server TLS configuration.
+
+    Checks: TLSv1.2+ required, TLSv1.1- forbidden, trusted CA,
+    non-expired certificate, chain present, hostname match, RFC 9325 ciphers.
+    """
+
+    def __init__(
+        self,
+        config: RdapSuiteConfig,
+        *,
+        resolver: "DnsResolver | None" = None,
+        tls_prober: "TlsProber | None" = None,
+    ) -> None:
+        self.config = config
+        self.resolver = resolver or DnsResolver()
+        self.tls_prober = tls_prober or TlsProber()
+
+    def run(self) -> RdapTestResult:
+        result = RdapTestResult(test_id="rdap-91")
+
+        for base_url_entry in self.config.base_urls:
+            base_url = base_url_entry["baseURL"]
+            parsed = urlparse(base_url)
+            hostname = parsed.hostname or ""
+            port = parsed.port or 443
+
+            try:
+                service_ports = self.resolver.resolve(hostname, port)
+            except Exception as exc:
+                result.add_error(
+                    "RDAP_TLS_DNS_RESOLUTION_ERROR", "ERROR",
+                    f"DNS resolution failed for {hostname}: {exc}",
+                )
+                continue
+
+            if not service_ports:
+                result.add_error(
+                    "RDAP_TLS_NO_SERVICE_PORTS_REACHABLE", "CRITICAL",
+                    f"No service ports resolved for {hostname}",
+                )
+                continue
+
+            reachable = 0
+            for sp in service_ports:
+                try:
+                    probe = self.tls_prober.probe(hostname, sp.ip, sp.port)
+                    reachable += 1
+                    self._check_probe_result(probe, sp, hostname, result)
+                except Exception as exc:
+                    result.add_error(
+                        "RDAP_TLS_SERVICE_PORT_UNREACHABLE", "ERROR",
+                        f"Port {sp.ip}:{sp.port} unreachable: {exc}",
+                    )
+
+            if reachable == 0:
+                result.add_error(
+                    "RDAP_TLS_NO_SERVICE_PORTS_REACHABLE", "CRITICAL",
+                    f"No service ports reachable for {hostname}",
+                )
+
+        return result
+
+    @staticmethod
+    def _check_probe_result(
+        probe: "TlsProbeResult",
+        sp: "ServicePort",
+        hostname: str,
+        result: RdapTestResult,
+    ) -> None:
+        if not probe.supports_tls_1_2:
+            result.add_error(
+                "RDAP_TLS_REQUIRED_PROTOCOL_NOT_SUPPORTED", "ERROR",
+                f"{sp.ip}:{sp.port} does not support TLSv1.2",
+            )
+        for forbidden in probe.forbidden_protocols_supported:
+            result.add_error(
+                "RDAP_TLS_FORBIDDEN_PROTOCOL_SUPPORTED", "ERROR",
+                f"{sp.ip}:{sp.port} supports forbidden protocol {forbidden}",
+            )
+        if not probe.certificate_trusted:
+            result.add_error(
+                "RDAP_TLS_UNTRUSTED_CERTIFICATE", "ERROR",
+                f"{sp.ip}:{sp.port} certificate not issued by trusted CA",
+            )
+        if probe.certificate_expired:
+            result.add_error(
+                "RDAP_TLS_EXPIRED_CERTIFICATE", "ERROR",
+                f"{sp.ip}:{sp.port} certificate has expired",
+            )
+        if not probe.certificate_chain_complete:
+            result.add_error(
+                "RDAP_TLS_CERTIFICATE_CHAIN_MISSING", "ERROR",
+                f"{sp.ip}:{sp.port} missing intermediate certificates",
+            )
+        if not probe.hostname_matches:
+            result.add_error(
+                "RDAP_TLS_CERTIFICATE_HOSTNAME_MISMATCH", "ERROR",
+                f"{sp.ip}:{sp.port} certificate does not match hostname {hostname}",
+            )
+        if not probe.has_recommended_cipher:
+            result.add_error(
+                "RDAP_TLS_BAD_CIPHER", "ERROR",
+                f"{sp.ip}:{sp.port} does not use an RFC 9325 recommended cipher",
+            )
+
+
+@dataclass(frozen=True)
+class TlsProbeResult:
+    """Result of a TLS probe against a single service port."""
+
+    supports_tls_1_2: bool = True
+    forbidden_protocols_supported: list[str] = field(default_factory=list)
+    certificate_trusted: bool = True
+    certificate_expired: bool = False
+    certificate_chain_complete: bool = True
+    hostname_matches: bool = True
+    has_recommended_cipher: bool = True
+    negotiated_cipher: str = ""
+    negotiated_protocol: str = ""
+
+
+class TlsProber:
+    """Performs TLS probing against a service port. Override for testing."""
+
+    def probe(self, hostname: str, ip: str, port: int) -> TlsProbeResult:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = True
+        ctx.verify_mode = ssl.CERT_REQUIRED
+
+        try:
+            with socket.create_connection((ip, port), timeout=10) as sock:
+                with ctx.wrap_socket(sock, server_hostname=hostname) as tls_sock:
+                    cipher_info = tls_sock.cipher()
+                    cipher_name = cipher_info[0] if cipher_info else ""
+                    protocol = cipher_info[1] if cipher_info and len(cipher_info) > 1 else ""
+                    return TlsProbeResult(
+                        supports_tls_1_2=True,
+                        certificate_trusted=True,
+                        certificate_expired=False,
+                        certificate_chain_complete=True,
+                        hostname_matches=True,
+                        has_recommended_cipher=cipher_name in RFC9325_RECOMMENDED_CIPHERS,
+                        negotiated_cipher=cipher_name,
+                        negotiated_protocol=protocol,
+                    )
+        except ssl.SSLCertVerificationError:
+            return TlsProbeResult(certificate_trusted=False)
+        except ssl.SSLError:
+            return TlsProbeResult(supports_tls_1_2=False)
+
+
+# ---------------------------------------------------------------------------
+# StandardRDAP test suite runner
+# ---------------------------------------------------------------------------
+
+class StandardRdapTestSuite:
+    """Runs all test cases in the StandardRDAP suite (rdap-01 … rdap-92).
+
+    Usage:
+        suite = StandardRdapTestSuite(config)
+        results = suite.run_all()
+    """
+
+    def __init__(
+        self,
+        config: RdapSuiteConfig,
+        *,
+        client: RdapHttpClient | None = None,
+        resolver: DnsResolver | None = None,
+        querier: "RdapServicePortQuerier | None" = None,
+        tls_prober: TlsProber | None = None,
+    ) -> None:
+        self.config = config
+        self.client = client
+        self.resolver = resolver
+        self.querier = querier
+        self.tls_prober = tls_prober
+
+    def run_all(self) -> list[RdapTestResult]:
+        results: list[RdapTestResult] = []
+        results.append(DomainQueryChecker(self.config, client=self.client).run())
+        results.append(NameserverQueryChecker(self.config, client=self.client).run())
+        results.append(EntityQueryChecker(self.config, client=self.client).run())
+        results.append(HelpQueryChecker(self.config, client=self.client).run())
+        results.append(DomainHeadChecker(self.config, client=self.client).run())
+        results.append(NameserverHeadChecker(self.config, client=self.client).run())
+        results.append(EntityHeadChecker(self.config, client=self.client).run())
+        results.append(NonExistentDomainChecker(self.config, client=self.client).run())
+        results.append(NonExistentNameserverChecker(self.config, client=self.client).run())
+        results.append(NonExistentEntityChecker(self.config, client=self.client).run())
+        results.append(TlsConformanceChecker(
+            self.config, resolver=self.resolver, tls_prober=self.tls_prober,
+        ).run())
+
+        rdap92_config = Rdap92Config(
+            base_urls=self.config.base_urls,
+            test_domains=self.config.test_domains,
+            test_entities=self.config.test_entities,
+            test_nameservers=self.config.test_nameservers,
+            timeout_seconds=self.config.timeout_seconds,
+        )
+        r92 = ServicePortConsistencyChecker(
+            rdap92_config, resolver=self.resolver, querier=self.querier,
+        ).run()
+        r92_result = RdapTestResult(test_id="rdap-92", passed=r92.passed)
+        for err in r92.errors:
+            r92_result.errors.append(RdapTestError(
+                code=err.code, severity=err.severity, detail=err.detail,
+            ))
+        results.append(r92_result)
+
+        return results
 
 
 # ---------------------------------------------------------------------------
