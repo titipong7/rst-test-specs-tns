@@ -1,0 +1,17 @@
+{
+  "dnssecOps.csk": false,
+  "dnssecOps.zskRolloverZone": "zsk-rollover.example",
+  "dnssecOps.primaryServers": {
+    "v4Addrs": ["192.0.2.10"],
+    "v6Addrs": ["2001:db8::53:10"]
+  },
+  "expectedTimeline": {
+    "monitorWindowHours": 48,
+    "minimumDelegations": 10000,
+    "ttlsSeconds": {
+      "dnskey": 300,
+      "rrsig": 300
+    },
+    "originalZskState": "removed-before-deadline"
+  }
+}

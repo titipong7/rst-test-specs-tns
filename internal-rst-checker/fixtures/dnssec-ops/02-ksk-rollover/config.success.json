@@ -1,0 +1,13 @@
+{
+  "dnssecOps.csk": false,
+  "dnssecOps.kskRolloverZone": "ksk-rollover.example",
+  "dnssecOps.primaryServers": {
+    "v4Addrs": ["192.0.2.20"],
+    "v6Addrs": ["2001:db8::53:20"]
+  },
+  "expectedTimeline": {
+    "monitorWindowHours": 48,
+    "newDsPublishedBeforeOldRemoval": true,
+    "chainOfTrustValid": true
+  }
+}

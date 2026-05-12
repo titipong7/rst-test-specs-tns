@@ -1,0 +1,14 @@
+{
+  "dnssecOps.csk": false,
+  "dnssecOps.algorithmRolloverZone": "alg-rollover.example",
+  "dnssecOps.primaryServers": {
+    "v4Addrs": ["192.0.2.30"],
+    "v6Addrs": ["2001:db8::53:30"]
+  },
+  "transition": {
+    "from": {"alg": 8, "name": "RSASHA256"},
+    "to":   {"alg": 13, "name": "ECDSAP256SHA256"},
+    "doubleSignaturePhaseHours": 24,
+    "chainOfTrustValid": true
+  }
+}

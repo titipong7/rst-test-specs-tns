@@ -1,0 +1,12 @@
+{
+  "dnssecOps.csk": false,
+  "dnssecOps.zskRolloverZone": "zsk-rollover.example",
+  "dnssecOps.primaryServers": {
+    "v4Addrs": ["192.0.2.10"]
+  },
+  "expectedFindings": [
+    "DNSSEC_OPS_ZSK_ROLLOVER_NOT_COMPLETED",
+    "DNSSEC_OPS_ZSK_ROLLOVER_CHAIN_OF_TRUST_BROKEN"
+  ],
+  "scenario": "ZSK swap aborted; original key never withdrawn before the 48h deadline."
+}
