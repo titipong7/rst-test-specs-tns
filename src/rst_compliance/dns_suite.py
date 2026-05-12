@@ -68,6 +68,7 @@ class DnsSuiteConfig:
     ds_records: list[dict[str, Any]] = field(default_factory=list)
     glue_policy: str = "narrow"
     timeout_seconds: int = 10
+    additional_transports: tuple[str, ...] = field(default_factory=tuple)
 
 
 # ---------------------------------------------------------------------------
@@ -758,7 +759,7 @@ class DnsIdna2008ComplianceChecker:
 
 
 class DnsConsistencyChecker:
-    """dns-zz-consistency: Cross-vantage-point nameserver consistency."""
+    """dns-zz-consistency: Cross-vantage-point nameserver and transport consistency."""
     def __init__(self, config: DnsSuiteConfig, *, querier: DnsQuerier | None = None) -> None:
         self.config = config
         self.querier = querier
@@ -770,7 +771,7 @@ class DnsConsistencyChecker:
         for tld_entry in self.config.nameservers:
             responses: list[tuple[str, DnsQueryResult]] = []
             for ns in tld_entry.get("nameservers", []):
-                for protocol in ("udp", "tcp"):
+                for protocol in ("udp", "tcp", *self.config.additional_transports):
                     for addr in ns.get("v4Addrs", []) + ns.get("v6Addrs", []):
                         try:
                             qr = self.querier.query_soa(

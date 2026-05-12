@@ -395,6 +395,19 @@ class TestDnsConsistency:
         assert not result.passed
         assert any(e.code == "DNS_CONSISTENCY_QUERY_FAILED" for e in result.errors)
 
+    def test_additional_dns_transports_are_queried(self, base_config: DnsSuiteConfig) -> None:
+        config = DnsSuiteConfig(
+            nameservers=base_config.nameservers,
+            ds_records=base_config.ds_records,
+            additional_transports=("dot", "doh", "doq"),
+        )
+        querier = StubQuerier()
+
+        result = DnsConsistencyChecker(config, querier=querier).run()
+
+        assert result.passed
+        assert {"udp", "tcp", "dot", "doh", "doq"}.issubset({call["protocol"] for call in querier.calls})
+
 
 # ===================================================================
 # DNSSEC custom cases
