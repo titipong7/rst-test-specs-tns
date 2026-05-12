@@ -8,10 +8,10 @@ implementations; live network collection remains a harness concern.
 
 | Status | Suites | Test Cases | Unit Tests |
 |--------|--------|------------|------------|
-| ✅ Implemented checker suites | 10 | 128 | 301 |
+| ✅ Implemented checker suites | 10 | 128 | 302 |
 | ❌ Not implemented | 0 | 0 | — |
 | ⚠️ Shared/overlap | 1 | (1) | covered by DNS tests |
-| **Total** | **11** | **128+** | **301** |
+| **Total** | **11** | **128+** | **302** |
 
 ---
 
@@ -29,7 +29,7 @@ implementations; live network collection remains a harness concern.
 | 6 | **StandardEPP** | 26 | `src/rst_compliance/epp_client.py` + internal tests | 55 | `docs/epp-test-case-summary.md` |
 | 7 | **StandardIDN** | 2 | `src/rst_compliance/idn_suite.py` | 4 | `docs/pending-suite-implementation.md` |
 | 8 | **StandardSRSGateway** | 14 | `src/rst_compliance/srsgw_suite.py` | 6 | `docs/pending-suite-implementation.md` |
-| 9 | **MinimumRPMs** | 3 | `src/rst_compliance/minimum_rpms_suite.py` | 5 | `docs/pending-suite-implementation.md` |
+| 9 | **MinimumRPMs** | 3 | `src/rst_compliance/minimum_rpms_suite.py` | 6 | `docs/pending-suite-implementation.md` |
 | 10 | **StandardIntegrationTest** | 5 | `src/rst_compliance/integration_suite.py` | 7 | `docs/pending-suite-implementation.md` |
 
 ### ⚠️ Shared/Overlap Suite
@@ -262,7 +262,7 @@ All implemented suites follow a consistent dependency-injection pattern:
 | `tests/test_rde_suite.py` | 41 | StandardRDE |
 | `tests/test_rde_deposit_helper.py` | 10 | RDE deposit helper |
 | `tests/test_idn_suite.py` | 4 | StandardIDN |
-| `tests/test_minimum_rpms_suite.py` | 5 | MinimumRPMs |
+| `tests/test_minimum_rpms_suite.py` | 6 | MinimumRPMs |
 | `tests/test_integration_suite.py` | 7 | StandardIntegrationTest |
 | `tests/test_srsgw_suite.py` | 6 | StandardSRSGateway |
 | `tests/test_dnssec_zone_health.py` | 3 | DNSSEC zone health |

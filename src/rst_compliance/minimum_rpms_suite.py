@@ -10,6 +10,7 @@ All checkers follow the same dependency-injection pattern as RDAP/DNS/RDE suites
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import xml.etree.ElementTree as ET
 
 from rst_compliance.epp_client import EppClient
 
@@ -129,7 +130,7 @@ class _RpmsCreateChecker:
         for observation in observations:
             try:
                 succeeded = _response_succeeded(observation.response_xml)
-            except ValueError as exc:
+            except (ValueError, ET.ParseError) as exc:
                 result.add_error("EPP_XML_PARSE_ERROR", "ERROR", f"{observation.scenario} response parse failed: {exc}")
                 continue
             if observation.expected_success and not succeeded:

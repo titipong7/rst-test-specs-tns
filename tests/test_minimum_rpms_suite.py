@@ -70,6 +70,19 @@ def test_minimum_rpms_03_trademark_claims_reports_invalid_notice_success() -> No
     assert any(error.code == "RPMS_TRADEMARK_CREATE_UNEXPECTED_SUCCESS_USING_INVALID_NOTICE_ID" for error in result.errors)
 
 
+def test_minimum_rpms_create_reports_malformed_epp_response() -> None:
+    result = MinimumRpms02SunriseCreateChecker(
+        MinimumRpmsSuiteConfig(
+            sunrise_creates=[
+                RpmsCreateObservation("malformed-response", expected_success=True, response_xml="<epp"),
+            ]
+        )
+    ).run()
+
+    assert not result.passed
+    assert any(error.code == "EPP_XML_PARSE_ERROR" for error in result.errors)
+
+
 def test_minimum_rpms_suite_runs_all_three_cases() -> None:
     config = MinimumRpmsSuiteConfig(
         claims_checks=[ClaimsCheckObservation("dnl.example", present_on_dnl=True, claim_key="abc123")],
