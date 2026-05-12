@@ -1,84 +1,61 @@
-# Review — Fixtures for DNS / DNSSEC / RDE / RDAP / SRSGW / IDN / Integration
+# Review — Non-EPP Fixtures Re-aligned to Flat EPP Layout
 
-> Role: **Reviewer**. Findings are graded against
-> `.cursor/rules/review-severity-gate.mdc`.
+> Role: **Reviewer**. Applies `.cursor/rules/review-severity-gate.mdc`
+> to the Builder + Tester outputs and decides on the merge gate.
 
-## Acceptance criteria check
+## 1. Scope under review
 
-| Plan §4 criterion                                                                                                | Status                                                                                                                                                |
-| ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Every case in §2 has at least one fixture and per-case happy/negative branches                                    | **Met** (see per-suite README tables + `ACTIVE_CASES` dictionaries).                                                                                  |
-| Naming convention `*.success.<ext>` / `*.failure.<ext>` used consistently                                         | **Met**, including the documented exceptions (`idn-02` ships only a negative fixture per spec; `srsgw-01` is connectivity-only).                       |
-| Per-suite guard test mirroring `tests/epp/test_epp_th_fixtures_present.py`                                        | **Met** — 8 new files under `internal-rst-checker/tests/<suite>/`.                                                                                    |
-| Per-suite + top-level README                                                                                      | **Met** — 8 suite READMEs + new `internal-rst-checker/fixtures/README.md`.                                                                            |
-| Cross-link from EPP mapping doc to non-EPP suites                                                                 | **Met** — new "Non-EPP Suite Fixture Pointers" section in `docs/epp-spec-to-test-mapping.md`.                                                          |
-| No spec files modified                                                                                            | **Met** — diff scoped to `internal-rst-checker/fixtures/**`, `internal-rst-checker/tests/**`, `docs/agent-artifacts/**`, and two existing doc files.   |
-| No secrets / no real `.env` files committed                                                                       | **Met** — only `*.env.example` templates added (11 total); placeholders use documentation prefixes (`192.0.2.0/24`, `2001:db8::/32`, `*.example`).     |
-| Make targets / CI workflows unchanged                                                                              | **Met** — no `Makefile` or `.github/workflows/**` modifications.                                                                                       |
-| Test runs green                                                                                                   | **Met** — 380 passed / 14 skipped / 0 failed across `internal-rst-checker/tests` + `tests` (see `test.md`).                                          |
+- Branch: `feat/non-epp-fixtures-flat-layout`
+- Commits: `cbe7c1f`…`b0d58b9` (8 commits, listed in
+  [`build.md`](./build.md) §2).
+- Plan: [`plan.md`](./plan.md) (final version, supersedes the PR #23
+  plan).
+- Test evidence: [`test.md`](./test.md).
 
-## Findings
+## 2. Findings (severity table)
 
-### Severity: blocker
+| #  | Finding                                                                                  | Severity | Evidence                                                                                                                                                | Required action                                |
+| -- | ---------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| 1  | All migrated guard tests pass (pyt cmds in test.md §2.1–§2.3).                            | n/a      | `pytest internal-rst-checker/tests -q` → `144 passed, 14 skipped`.                                                                                       | None — meets AC1..AC5, AC8.                    |
+| 2  | Module-level Python suite (`tests/`) stays green.                                        | n/a      | `pytest tests -q` → `65 passed`.                                                                                                                         | None — meets AC6.                              |
+| 3  | `make quality-gate` requires Perl modules (`Data::Mirror`, `ICANN::RST::Spec`) for the `includes` / `lint` sub-targets. Local environment doesn't ship them. | low      | `make quality-gate` fails at `includes` step on this workstation; same failure pattern reproduces on `main` without the migration. | Document the locally-skipped sub-targets in the PR description; CI handles them via apt installs (`.github/workflows/**` untouched, AC9). |
+| 4  | Combined `pytest internal-rst-checker/tests tests` raises 3 collection errors for duplicate test module names. | low      | Pre-existing repository condition; reproduces on a clean checkout of `main`. The two roots are run separately in CI.                                  | None for this PR. Track as backlog for a separate hygiene PR (move shared `tests/test_dnssec_zone_health.py` and friends under a unique namespace). |
+| 5  | DNSSEC-Ops is **still** on the per-case sub-folder layout while the other 7 suites are flat. | low      | `internal-rst-checker/fixtures/dnssec-ops/{91,92,93}-…/`; `internal-rst-checker/fixtures/README.md` explicitly flags it. Plan §1 lists it as a non-goal. | None for this PR. Track as the next work package. |
+| 6  | RDE PGP signature placeholder rename `*.sig.example` → `*.asc`.                          | low      | Spec talks about ASCII-armoured PGP (`.asc` is the GnuPG convention). Renamed during migration (`f978964`).                                              | None — improvement, README documents the convention. |
+| 7  | Top-level `internal-rst-checker/fixtures/README.md` accurately captures the flat layout and the DNSSEC-Ops divergence. | n/a      | Manual diff against the on-disk layout.                                                                                                                  | None — meets AC4.                              |
+| 8  | Scope audit: only fixture / guard-test / docs paths are touched.                         | n/a      | `git diff main…HEAD --stat` (see test.md §3). `inc/**`, `src/rst_compliance/**`, `Makefile`, `.github/workflows/**`, `rst-test-specs.*` unmodified.       | None — meets AC9.                              |
 
-_None._
+## 3. Merge-gate decision
 
-### Severity: high
+- **Blockers:** 0
+- **High:** 0
+- **Medium:** 0
+- **Low:** 4 (#3, #4, #5, #6 — all explained and either intentional or pre-existing)
 
-_None._
+→ **Merge gate cleared** (`.cursor/rules/review-severity-gate.mdc`
+requires only `blocker == 0 && high == 0`).
 
-### Severity: medium
+## 4. PR description anchor
 
-**M1. RDE binary placeholders cannot be cryptographically validated in offline tests.**
-- Evidence: `internal-rst-checker/fixtures/rde/02-signature/*.sig.example`
-  and `internal-rst-checker/fixtures/rde/03-decrypt/*.ryde.example`
-  carry human-readable placeholders rather than real OpenPGP or RYDE
-  bytes. The fixture-present guard test parametrises only well-formedness
-  on `.xml` and `.json` files, so a corrupted real binary would still
-  pass.
-- Required action (defer rationale acceptable):
-  - Defer: live signature/decrypt validation belongs in the
-    runtime checker, not in offline fixture smoke tests. The plan
-    explicitly excludes "real OpenPGP signatures / live decryption" and
-    the README states this.
-  - Follow-up: when the runtime decryptor lands for `rde-03`, add a
-    targeted negative-path unit test fed by a real (test-only) keypair
-    stored outside this repo.
+When opening the PR, copy the following summary:
 
-### Severity: low
+> Re-aligns the 7 non-EPP suites (DNS, DNSSEC, RDE, RDAP, SRSGW, IDN,
+> Integration) to the flat EPP fixture layout
+> (`<nn>-<slug>-{success,failure}.<ext>` directly under the suite
+> folder). Rewrites the per-suite guard tests to a glob-based
+> `ACTIVE_CASES` check matching the EPP template, refreshes per-suite
+> READMEs + the top-level fixtures README, and adds a layout note to
+> `docs/epp-spec-to-test-mapping.md`. DNSSEC-Ops stays on its current
+> per-case sub-folder layout (called out explicitly in
+> `fixtures/README.md`).
+>
+> ### Test plan
+> - `pytest -q internal-rst-checker/tests` → 144 passed, 14 documented skips
+> - `pytest -q tests` → 65 passed
+> - `make quality-gate-python` (Python sub-target) → green
+> - `make lint` / `make includes` exercised in CI only (Perl deps).
 
-**L1. Some negative-path JSON fixtures contain an `expectedFindings` advisory key.**
-- Evidence: e.g. `rdap/91-tls-conformance/probe.failure.json`,
-  `integration/04-glue-policy-host-objects/dns-query.failure.json`.
-- Required action: none for this PR. The key is informational, mirrors
-  the spec's error catalogues, and the JSON parser accepts it. If a
-  future schema landed, the field could be promoted to a typed
-  `metadata.expectedFindings` block.
+## 5. Hand-off
 
-**L2. `srsgw-07` is intentionally absent but never explicitly tested for absence.**
-- Evidence: spec note in `inc/srsgw/cases.yaml` ("srsgw-07 has been merged
-  with srsgw-06") and prose note in the SRSGW README, but no test
-  asserts that no `srsgw/07-*` folder is created later by mistake.
-- Required action: backlog. Add a single assertion in
-  `test_srsgw_fixtures_present.py` that `srsgw/07-*` glob returns empty,
-  once we have a similar guard for any spec-deleted case.
-
-## Diff scope sanity check
-
-```
-modified:  docs/epp-spec-to-test-mapping.md           (append-only)
-added:     docs/agent-artifacts/fixtures-dns-dnssec-rde-rdap/{plan,build,test,review}.md
-added:     internal-rst-checker/fixtures/README.md
-added:     internal-rst-checker/fixtures/{dns,dnssec,dnssec-ops,rde,rdap,srsgw,idn,integration}/**
-added:     internal-rst-checker/tests/{dns,dnssec,dnssec_ops,rde,rdap,srsgw,idn,integration}/test_<suite>_fixtures_present.py
-```
-
-No EPP suite paths, no spec files, no Makefile, no CI workflow changes.
-
-## Merge readiness
-
-- Severity gate: **0 blocker / 0 high / 1 medium (deferred with rationale) / 2 low (backlog).**
-- Acceptance criteria 1–9: **all met.**
-- CI surface unchanged; new tests are lightweight and deterministic.
-
-**`merge_ready: true`** — pending human approval.
+Reviewer signs off — Builder may push the branch and open the PR
+against `main`.
