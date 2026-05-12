@@ -64,6 +64,21 @@ def test_map_spec_criteria_reads_test_functions(tmp_path: Path) -> None:
     assert mapping[0]["criteriaIds"] == ["rdap-01"]
 
 
+def test_map_spec_criteria_reads_pending_suite_prefixes(tmp_path: Path) -> None:
+    tests_root = tmp_path / "tests"
+    tests_root.mkdir(parents=True)
+    (tests_root / "test_pending_sample.py").write_text(
+        "def test_pending_suite_cases():\n"
+        "    '''covers idn-01, minimumRPMs-02, srsgw-13, integration-05'''\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+
+    mapping = map_spec_criteria(tests_root=tests_root)
+
+    assert mapping[0]["criteriaIds"] == ["idn-01", "integration-05", "minimumrpms-02", "srsgw-13"]
+
+
 def test_summarize_schemas_counts_json_and_xsd_files(tmp_path: Path) -> None:
     schemas_root = tmp_path / "schemas"
     (schemas_root / "json").mkdir(parents=True)

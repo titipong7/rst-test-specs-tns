@@ -17,7 +17,7 @@ from rst_compliance.epp_connectivity import Epp01ProbeConfig, run_epp01_connecti
 from rst_compliance.fips_check import check_hsm_fips_140_3_mode
 
 SPEC_REFERENCE = "ICANN RST v2026.04"
-CASE_ID_PATTERN = re.compile(r"\b(?:dns|rdap|epp|rde)-\d+\b", re.IGNORECASE)
+CASE_ID_PATTERN = re.compile(r"\b(?:dns|rdap|epp|rde|idn|srsgw|integration|minimumRPMs)-\d+\b", re.IGNORECASE)
 ETC_REQUIREMENTS = (
     {
         "id": "etc-index-links",
