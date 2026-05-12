@@ -196,27 +196,161 @@ def summarize_etc_requirement_coverage(
     }
 
 
-def summarize_epp_suite_coverage(
-    *,
-    spec_mapping: list[dict[str, Any]],
-    case_results: list[dict[str, Any]],
-) -> dict[str, Any]:
-    case_status_by_name: dict[str, list[str]] = {}
+DEFAULT_SUITES: tuple[str, ...] = (
+    "dns",
+    "dnssec",
+    "dnssec-ops",
+    "epp",
+    "idn",
+    "integration",
+    "rdap",
+    "rde",
+    "srsgw",
+)
+
+# Map a case_id back to the 2-character on-disk prefix used by the flat
+# fixture layout (`<NN>-<slug>-{success,failure}.<ext>`). The default rule
+# is "trailing digits of the case_id, zero-padded to two characters"; suites
+# whose `case_id`s do not encode a numeric prefix override that via this table.
+_DNS_PREFIX_OVERRIDES = {
+    "dns-zz-idna2008-compliance": "01",
+    "dns-zz-consistency": "02",
+}
+_DNSSEC_OPS_PREFIX_OVERRIDES = {
+    "dnssecOps01-ZSKRollover": "01",
+    "dnssecOps02-KSKRollover": "02",
+    "dnssecOps03-AlgorithmRollover": "03",
+}
+SUITE_CASE_PREFIX: dict[str, dict[str, str]] = {
+    "dns": _DNS_PREFIX_OVERRIDES,
+    "dnssec-ops": _DNSSEC_OPS_PREFIX_OVERRIDES,
+}
+
+
+def _case_prefix(suite: str, case_id: str) -> str | None:
+    """Return the 2-char fixture prefix for a case_id, or None when unknown."""
+    overrides = SUITE_CASE_PREFIX.get(suite, {})
+    if case_id in overrides:
+        return overrides[case_id]
+    digits = re.findall(r"\d+", case_id)
+    if not digits:
+        return None
+    return digits[-1].zfill(2)
+
+
+_TOP_LEVEL_YAML_KEY = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):\s*$")
+
+
+def _read_top_level_keys(yaml_path: Path) -> list[str]:
+    """Minimalist YAML loader: return top-level keys preserving order.
+
+    The dashboard only needs the flat `case_id` / `error_code` keys from
+    `inc/<suite>/{cases,errors}.yaml`, which are guaranteed to be top-level
+    in this spec version. Avoids a runtime dependency on PyYAML so the
+    dashboard runs in minimal CI images.
+    """
+    if not yaml_path.is_file():
+        return []
+    keys: list[str] = []
+    for raw_line in yaml_path.read_text(encoding="utf-8").splitlines():
+        match = _TOP_LEVEL_YAML_KEY.match(raw_line)
+        if match:
+            keys.append(match.group(1))
+    return keys
+
+
+def load_active_case_ids(suite: str, inc_root: Path) -> tuple[str, ...]:
+    """Read `<inc_root>/<suite>/cases.yaml` and return its ordered case_id keys."""
+    return tuple(_read_top_level_keys(inc_root / suite / "cases.yaml"))
+
+
+def _read_case_maturity_from_yaml(yaml_path: Path) -> dict[str, str]:
+    if not yaml_path.is_file():
+        return {}
+    out: dict[str, str] = {}
+    current: str | None = None
+    maturity_pattern = re.compile(r"^  Maturity:\s+(\S+)\s*$")
+    for raw_line in yaml_path.read_text(encoding="utf-8").splitlines():
+        key = _TOP_LEVEL_YAML_KEY.match(raw_line)
+        if key:
+            current = key.group(1)
+            out.setdefault(current, "UNKNOWN")
+            continue
+        if current is None:
+            continue
+        mm = maturity_pattern.match(raw_line)
+        if mm:
+            out[current] = mm.group(1).upper()
+    return out
+
+
+def rollup_maturity(cases_yaml_path: Path) -> dict[str, int]:
+    """Aggregate Maturity counts from one ``cases.yaml`` file.
+
+    Returns a dict shaped like ``{"GAMMA": n, "BETA": n, "ALPHA": n,
+    "UNKNOWN": n, "total": n}``.
+    """
+    by_case = _read_case_maturity_from_yaml(cases_yaml_path)
+    counts: dict[str, int] = {}
+    for level in by_case.values():
+        key = (level or "UNKNOWN").upper()
+        counts[key] = counts.get(key, 0) + 1
+    counts["total"] = sum(counts.values())
+    return counts
+
+
+def load_case_maturity(suite: str, *, repo_root: Path) -> dict[str, str]:
+    """Return `{case_id: Maturity}` for every case in `inc/<suite>/cases.yaml`.
+
+    Missing or absent `Maturity:` lines map to ``"UNKNOWN"``.
+    """
+    return _read_case_maturity_from_yaml(repo_root / "inc" / suite / "cases.yaml")
+
+
+def _case_status_index(case_results: list[dict[str, Any]]) -> dict[str, list[str]]:
+    by_name: dict[str, list[str]] = {}
     for result in case_results:
         node_id = str(result.get("testCase", ""))
         if "::" not in node_id:
             continue
         test_name = node_id.rsplit("::", 1)[-1]
-        case_status_by_name.setdefault(test_name, []).append(str(result.get("status", "")).lower())
+        by_name.setdefault(test_name, []).append(str(result.get("status", "")).lower())
+    return by_name
+
+
+def _matched_tests_for_case(
+    *,
+    suite: str,
+    case_id: str,
+    spec_mapping: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    module_alias = "dnssec_ops" if suite == "dnssec-ops" else suite
+    needle = case_id.lower()
+    matches: list[dict[str, Any]] = []
+    for entry in spec_mapping:
+        criteria = [str(value).lower() for value in entry.get("criteriaIds", [])]
+        if needle not in criteria:
+            continue
+        module = str(entry.get("module", ""))
+        if module not in (suite, module_alias):
+            continue
+        matches.append(entry)
+    return matches
+
+
+def summarize_suite_coverage(
+    suite: str,
+    *,
+    spec_mapping: list[dict[str, Any]],
+    case_results: list[dict[str, Any]],
+    active_case_ids: Sequence[str],
+) -> dict[str, Any]:
+    """Coverage matrix for one suite, generalised from the legacy EPP variant."""
+    case_status_by_name = _case_status_index(case_results)
 
     matrix: list[dict[str, Any]] = []
-    for case_id in EPP_CASE_IDS:
-        matched_tests = [
-            entry
-            for entry in spec_mapping
-            if entry.get("module") == "epp" and case_id in entry.get("criteriaIds", [])
-        ]
-        if case_id == "epp-22":
+    for case_id in active_case_ids:
+        if suite == "epp" and case_id == "epp-22":
             matrix.append(
                 {
                     "caseId": case_id,
@@ -226,6 +360,10 @@ def summarize_epp_suite_coverage(
                 }
             )
             continue
+
+        matched_tests = _matched_tests_for_case(
+            suite=suite, case_id=case_id, spec_mapping=spec_mapping
+        )
         if not matched_tests:
             matrix.append(
                 {
@@ -279,6 +417,79 @@ def summarize_epp_suite_coverage(
     for item in matrix:
         summary[item["status"]] = summary.get(item["status"], 0) + 1
     return {"matrix": matrix, "summary": summary}
+
+
+def summarize_epp_suite_coverage(
+    *,
+    spec_mapping: list[dict[str, Any]],
+    case_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Backwards-compatible wrapper preserved for the legacy `eppSuiteCoverage` key."""
+    return summarize_suite_coverage(
+        "epp",
+        spec_mapping=spec_mapping,
+        case_results=case_results,
+        active_case_ids=EPP_CASE_IDS,
+    )
+
+
+def summarize_all_suite_coverage(
+    *,
+    repo_root: Path,
+    spec_mapping: list[dict[str, Any]],
+    case_results: list[dict[str, Any]],
+    suites: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Run `summarize_suite_coverage` for every in-scope suite."""
+    target_suites = tuple(suites) if suites else DEFAULT_SUITES
+    inc_root = repo_root / "inc"
+    out: dict[str, Any] = {}
+    for suite in target_suites:
+        case_ids: tuple[str, ...] = (
+            EPP_CASE_IDS if suite == "epp" else load_active_case_ids(suite, inc_root)
+        )
+        if not case_ids:
+            continue
+        out[suite] = summarize_suite_coverage(
+            suite,
+            spec_mapping=spec_mapping,
+            case_results=case_results,
+            active_case_ids=case_ids,
+        )
+    return out
+
+
+def summarize_maturity_rollup(
+    *,
+    suite: str,
+    case_maturity: dict[str, str],
+) -> dict[str, int]:
+    """Bucket a `{case_id: level}` map into numeric per-level counts."""
+    _ = suite  # accepted for symmetry with other summarizers; not used numerically.
+    counts: dict[str, int] = {}
+    for level in case_maturity.values():
+        key = (level or "UNKNOWN").upper()
+        counts[key] = counts.get(key, 0) + 1
+    counts["total"] = sum(v for k, v in counts.items() if k != "total")
+    return counts
+
+
+def summarize_all_maturity(
+    *,
+    repo_root: Path,
+    suites: Sequence[str] | None = None,
+) -> dict[str, dict[str, int]]:
+    """Run `rollup_maturity` for every in-scope suite."""
+    target_suites = tuple(suites) if suites else DEFAULT_SUITES
+    out: dict[str, dict[str, int]] = {}
+    for suite in target_suites:
+        cases_yaml = repo_root / "inc" / suite / "cases.yaml"
+        if not cases_yaml.is_file():
+            continue
+        rollup = rollup_maturity(cases_yaml)
+        if rollup.get("total", 0) > 0:
+            out[suite] = rollup
+    return out
 
 
 def run_pytest(*, repo_root: Path, test_files: Sequence[Path], html_report: Path, junit_report: Path) -> dict[str, Any]:
@@ -431,6 +642,8 @@ def build_summary(
     case_results: list[dict[str, Any]],
     fips_summary: dict[str, Any],
     epp01_connectivity: dict[str, Any],
+    suite_coverage: dict[str, Any] | None = None,
+    maturity_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "generatedAt": _now_iso(),
@@ -446,6 +659,8 @@ def build_summary(
         "schemaInventory": schema_summary,
         "etcRequirementCoverage": etc_requirement_coverage,
         "eppSuiteCoverage": epp_suite_coverage,
+        "suiteCoverage": suite_coverage or {},
+        "maturitySummary": maturity_summary or {},
         "epp01Connectivity": epp01_connectivity,
         "fipsCheck": fips_summary,
         "caseResults": case_results,
@@ -474,6 +689,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reports-dir", type=Path, help="Override reports output directory")
     parser.add_argument("--json-report", type=Path, help="Optional JSON report file path")
     parser.add_argument("--html-report", type=Path, help="Optional HTML report file path")
+    parser.add_argument(
+        "--suite",
+        action="append",
+        help=(
+            "Limit suiteCoverage / maturitySummary to the named suites. "
+            "Repeatable; default = every default suite with cases.yaml on disk."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true", help="Prepare reports without running pytest")
     parser.add_argument("--live-epp01", action="store_true", help="Run live connectivity checks for epp-01")
     parser.add_argument("--epp-host", help="Override EPP host for epp-01 live checks")
@@ -549,6 +772,18 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
             "reason": "Live epp-01 probe disabled or EPP host not provided.",
         }
 
+    suites_filter = tuple(args.suite) if args.suite else None
+    suite_coverage = summarize_all_suite_coverage(
+        repo_root=paths.repo_root,
+        spec_mapping=spec_mapping,
+        case_results=case_results,
+        suites=suites_filter,
+    )
+    maturity_summary = summarize_all_maturity(
+        repo_root=paths.repo_root,
+        suites=suites_filter,
+    )
+
     summary = build_summary(
         paths=paths,
         discovered_tests=discovered_tests,
@@ -560,6 +795,8 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
         case_results=case_results,
         fips_summary=fips_summary,
         epp01_connectivity=epp01_connectivity,
+        suite_coverage=suite_coverage,
+        maturity_summary=maturity_summary,
     )
     write_report_files(
         summary=summary,
