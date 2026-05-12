@@ -220,6 +220,18 @@ DEFAULT_SUITES: tuple[str, ...] = (
     "srsgw",
 )
 
+
+def _safe_suite_segment(suite: str) -> str:
+    """Strip any path-traversal components from a user-supplied suite name.
+
+    Defense-in-depth for callers that bypass argparse's ``choices=`` guard
+    (e.g. library use). The dashboard's filesystem joins
+    (``inc_root / suite / "cases.yaml"``) are read-only, but normalising to
+    ``Path(suite).name`` removes ``../`` segments so a malformed input can
+    never escape ``inc_root`` / ``fixtures_root``.
+    """
+    return Path(suite).name
+
 # Map a case_id back to the 2-character on-disk prefix used by the flat
 # fixture layout (`<NN>-<slug>-{success,failure}.<ext>`). The default rule
 # is "trailing digits of the case_id, zero-padded to two characters"; suites
@@ -291,12 +303,14 @@ def _read_top_level_keys(yaml_path: Path) -> list[str]:
 
 def load_active_case_ids(suite: str, inc_root: Path) -> tuple[str, ...]:
     """Read `<inc_root>/<suite>/cases.yaml` and return its ordered case_id keys."""
-    return tuple(_read_top_level_keys(inc_root / suite / "cases.yaml"))
+    safe = _safe_suite_segment(suite)
+    return tuple(_read_top_level_keys(inc_root / safe / "cases.yaml"))
 
 
 def load_error_codes(suite: str, inc_root: Path) -> set[str]:
     """Read `<inc_root>/<suite>/errors.yaml` and return its declared error codes."""
-    return set(_read_top_level_keys(inc_root / suite / "errors.yaml"))
+    safe = _safe_suite_segment(suite)
+    return set(_read_top_level_keys(inc_root / safe / "errors.yaml"))
 
 
 def _read_case_maturity_from_yaml(yaml_path: Path) -> dict[str, str]:
@@ -340,7 +354,9 @@ def load_case_maturity(suite: str, *, repo_root: Path) -> dict[str, str]:
 
     Missing or absent `Maturity:` lines map to ``"UNKNOWN"``.
     """
-    return _read_case_maturity_from_yaml(repo_root / "inc" / suite / "cases.yaml")
+    return _read_case_maturity_from_yaml(
+        repo_root / "inc" / _safe_suite_segment(suite) / "cases.yaml"
+    )
 
 
 def _case_status_index(case_results: list[dict[str, Any]]) -> dict[str, list[str]]:
@@ -530,7 +546,7 @@ def _fixture_parses(path: Path) -> bool:
 
 def _fixture_iter(fixtures_root: Path, suite: str) -> list[Path]:
     """Return every fixture file under a suite folder, sorted, ignoring README/dirs."""
-    suite_root = fixtures_root / suite
+    suite_root = fixtures_root / _safe_suite_segment(suite)
     if not suite_root.is_dir():
         return []
     items: list[Path] = []
@@ -671,12 +687,13 @@ def compute_error_code_coverage(
 
 
 def _failure_fixtures_for(suite: str, fixtures_root: Path) -> list[Path]:
-    if suite == "epp":
+    safe = _safe_suite_segment(suite)
+    if safe == "epp":
         failure_files: list[Path] = []
         for _name, folder in _split_th_subfolder(fixtures_root):
             failure_files.extend(folder.glob("*-failure.*"))
         return failure_files
-    suite_root = fixtures_root / suite
+    suite_root = fixtures_root / safe
     return list(suite_root.glob("*-failure.*")) if suite_root.is_dir() else []
 
 
@@ -736,7 +753,7 @@ def summarize_all_maturity(
     target_suites = tuple(suites) if suites else DEFAULT_SUITES
     out: dict[str, dict[str, int]] = {}
     for suite in target_suites:
-        cases_yaml = repo_root / "inc" / suite / "cases.yaml"
+        cases_yaml = repo_root / "inc" / _safe_suite_segment(suite) / "cases.yaml"
         if not cases_yaml.is_file():
             continue
         rollup = rollup_maturity(cases_yaml)
@@ -1312,10 +1329,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--suite",
         action="append",
+        choices=DEFAULT_SUITES,
+        metavar="SUITE",
         help=(
-            "Limit suiteCoverage / fixtureInventory / maturitySummary to the "
-            "named suites. Repeatable; default = every default suite with "
-            "cases.yaml on disk."
+            "Limit suiteCoverage / fixtureInventory / errorCodeCoverage / "
+            "maturitySummary to the named suites. Repeatable; default = every "
+            "default suite with cases.yaml on disk. Allowed: "
+            f"{', '.join(DEFAULT_SUITES)}."
         ),
     )
     parser.add_argument(
