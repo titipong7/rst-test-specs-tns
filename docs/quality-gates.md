@@ -37,6 +37,22 @@ The workflow is configured for **PR only** and uses cache layers for:
 - go module/build cache (via `actions/setup-go` cache)
 - cpan artifacts (`~/.cpanm` and `~/perl5`)
 
+## Dashboard
+
+`make dashboard` (or `python3 internal-rst-checker/rst_dashboard.py --dry-run`)
+regenerates two artefacts under `internal-rst-checker/reports/`:
+
+- `report.json` — additive structured summary (suite coverage, fixture
+  inventory, error-code coverage, maturity rollup, etc.). The legacy
+  keys (`eppSuiteCoverage`, `etcRequirementCoverage`, …) are preserved
+  for backwards compatibility.
+- `dashboard.html` — self-contained human-readable view (no JS).
+  Pair it with `report.html` (the pytest-html test-execution report)
+  for full visibility.
+
+CLI knobs: `--suite <name>` (repeatable), `--skip-fixtures`,
+`--skip-errors`, `--dashboard-html <PATH>`, `--no-dashboard`.
+
 ## Merge Criteria
 
 Changes are merge-ready only when:

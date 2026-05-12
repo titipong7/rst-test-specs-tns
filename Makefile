@@ -8,7 +8,9 @@ yaml: export ZM_VERSION=$(ZONEMASTER_VERSION)
 
 all: zonemaster-profile rdapct-config includes yaml lint json html
 
-.PHONY: bootstrap-internal-checker-schemas bootstrap-quality-gate quality-gate quality-gate-python
+.PHONY: bootstrap-internal-checker-schemas bootstrap-quality-gate quality-gate quality-gate-python dashboard
+
+PYTHON ?= python3
 
 zonemaster-profile:
 	@echo Generating Zonemaster profile...
@@ -70,6 +72,12 @@ quality-gate-python:
 
 quality-gate: includes yaml lint quality-gate-python
 	@echo "Quality gate passed (lint + python tests)"
+
+dashboard:
+	@echo "Generating internal RST dashboard (dry-run)..."
+	@PYTHONPATH=src $(PYTHON) internal-rst-checker/rst_dashboard.py \
+		--dry-run --reports-dir internal-rst-checker/reports
+	@echo "Wrote internal-rst-checker/reports/{report.json,dashboard.html}"
 
 json:
 	@echo Compiling JSON...

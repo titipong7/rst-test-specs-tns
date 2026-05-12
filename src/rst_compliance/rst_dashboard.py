@@ -17,7 +17,20 @@ from rst_compliance.epp_connectivity import Epp01ProbeConfig, run_epp01_connecti
 from rst_compliance.fips_check import check_hsm_fips_140_3_mode
 
 SPEC_REFERENCE = "ICANN RST v2026.04"
-CASE_ID_PATTERN = re.compile(r"\b(?:dns|rdap|epp|rde|idn|srsgw|integration|minimumRPMs)-\d+\b", re.IGNORECASE)
+
+CASE_ID_PATTERN: re.Pattern[str] = re.compile(
+    r"\b(?:dns|dnssec|rdap|epp|rde|srsgw|idn|integration)"
+    r"-(?:zz-[a-z0-9-]+|\d+)\b",
+    re.IGNORECASE,
+)
+CASE_ID_PATTERNS: tuple[re.Pattern[str], ...] = (CASE_ID_PATTERN,)
+
+
+def _extract_case_ids(text: str) -> set[str]:
+    return {match for match in CASE_ID_PATTERN.findall(text)}
+
+
+
 ETC_REQUIREMENTS = (
     {
         "id": "etc-index-links",
@@ -91,10 +104,10 @@ def map_spec_criteria(*, tests_root: Path, modules: Sequence[str] | None = None)
         parsed = ast.parse(source)
         for node in parsed.body:
             if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
-                labels = set(CASE_ID_PATTERN.findall(node.name))
+                labels = _extract_case_ids(node.name)
                 docstring = ast.get_docstring(node)
                 if docstring:
-                    labels.update(CASE_ID_PATTERN.findall(docstring))
+                    labels.update(_extract_case_ids(docstring))
                 mappings.append(
                     {
                         "testName": node.name,
@@ -183,27 +196,166 @@ def summarize_etc_requirement_coverage(
     }
 
 
-def summarize_epp_suite_coverage(
-    *,
-    spec_mapping: list[dict[str, Any]],
-    case_results: list[dict[str, Any]],
-) -> dict[str, Any]:
-    case_status_by_name: dict[str, list[str]] = {}
+DEFAULT_SUITES: tuple[str, ...] = (
+    "dns",
+    "dnssec",
+    "dnssec-ops",
+    "epp",
+    "idn",
+    "integration",
+    "rdap",
+    "rde",
+    "srsgw",
+)
+
+# Map a case_id back to the 2-character on-disk prefix used by the flat
+# fixture layout (`<NN>-<slug>-{success,failure}.<ext>`). The default rule
+# is "trailing digits of the case_id, zero-padded to two characters"; suites
+# whose `case_id`s do not encode a numeric prefix override that via this table.
+_DNS_PREFIX_OVERRIDES = {
+    "dns-zz-idna2008-compliance": "01",
+    "dns-zz-consistency": "02",
+}
+_DNSSEC_OPS_PREFIX_OVERRIDES = {
+    "dnssecOps01-ZSKRollover": "01",
+    "dnssecOps02-KSKRollover": "02",
+    "dnssecOps03-AlgorithmRollover": "03",
+}
+SUITE_CASE_PREFIX: dict[str, dict[str, str]] = {
+    "dns": _DNS_PREFIX_OVERRIDES,
+    "dnssec-ops": _DNSSEC_OPS_PREFIX_OVERRIDES,
+}
+
+
+def _case_prefix(suite: str, case_id: str) -> str | None:
+    """Return the 2-char fixture prefix for a case_id, or None when unknown."""
+    overrides = SUITE_CASE_PREFIX.get(suite, {})
+    if case_id in overrides:
+        return overrides[case_id]
+    digits = re.findall(r"\d+", case_id)
+    if not digits:
+        return None
+    return digits[-1].zfill(2)
+
+
+_TOP_LEVEL_YAML_KEY = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):\s*$")
+
+
+def _read_top_level_keys(yaml_path: Path) -> list[str]:
+    """Minimalist YAML loader: return top-level keys preserving order.
+
+    The dashboard only needs the flat `case_id` / `error_code` keys from
+    `inc/<suite>/{cases,errors}.yaml`, which are guaranteed to be top-level
+    in this spec version. Avoids a runtime dependency on PyYAML so the
+    dashboard runs in minimal CI images.
+    """
+    if not yaml_path.is_file():
+        return []
+    keys: list[str] = []
+    for raw_line in yaml_path.read_text(encoding="utf-8").splitlines():
+        match = _TOP_LEVEL_YAML_KEY.match(raw_line)
+        if match:
+            keys.append(match.group(1))
+    return keys
+
+
+def load_active_case_ids(suite: str, inc_root: Path) -> tuple[str, ...]:
+    """Read `<inc_root>/<suite>/cases.yaml` and return its ordered case_id keys."""
+    return tuple(_read_top_level_keys(inc_root / suite / "cases.yaml"))
+
+
+def load_error_codes(suite: str, inc_root: Path) -> set[str]:
+    """Read `<inc_root>/<suite>/errors.yaml` and return its declared error codes."""
+    return set(_read_top_level_keys(inc_root / suite / "errors.yaml"))
+
+
+def _read_case_maturity_from_yaml(yaml_path: Path) -> dict[str, str]:
+    if not yaml_path.is_file():
+        return {}
+    out: dict[str, str] = {}
+    current: str | None = None
+    maturity_pattern = re.compile(r"^  Maturity:\s+(\S+)\s*$")
+    for raw_line in yaml_path.read_text(encoding="utf-8").splitlines():
+        key = _TOP_LEVEL_YAML_KEY.match(raw_line)
+        if key:
+            current = key.group(1)
+            out.setdefault(current, "UNKNOWN")
+            continue
+        if current is None:
+            continue
+        mm = maturity_pattern.match(raw_line)
+        if mm:
+            out[current] = mm.group(1).upper()
+    return out
+
+
+def rollup_maturity(cases_yaml_path: Path) -> dict[str, int]:
+    """Aggregate Maturity counts from one ``cases.yaml`` file.
+
+    Returns a dict shaped like ``{"GAMMA": n, "BETA": n, "ALPHA": n,
+    "UNKNOWN": n, "total": n}``.
+    """
+    by_case = _read_case_maturity_from_yaml(cases_yaml_path)
+    counts: dict[str, int] = {}
+    for level in by_case.values():
+        key = (level or "UNKNOWN").upper()
+        counts[key] = counts.get(key, 0) + 1
+    counts["total"] = sum(counts.values())
+    return counts
+
+
+def load_case_maturity(suite: str, *, repo_root: Path) -> dict[str, str]:
+    """Return `{case_id: Maturity}` for every case in `inc/<suite>/cases.yaml`.
+
+    Missing or absent `Maturity:` lines map to ``"UNKNOWN"``.
+    """
+    return _read_case_maturity_from_yaml(repo_root / "inc" / suite / "cases.yaml")
+
+
+def _case_status_index(case_results: list[dict[str, Any]]) -> dict[str, list[str]]:
+    by_name: dict[str, list[str]] = {}
     for result in case_results:
         node_id = str(result.get("testCase", ""))
         if "::" not in node_id:
             continue
         test_name = node_id.rsplit("::", 1)[-1]
-        case_status_by_name.setdefault(test_name, []).append(str(result.get("status", "")).lower())
+        by_name.setdefault(test_name, []).append(str(result.get("status", "")).lower())
+    return by_name
+
+
+def _matched_tests_for_case(
+    *,
+    suite: str,
+    case_id: str,
+    spec_mapping: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    module_alias = "dnssec_ops" if suite == "dnssec-ops" else suite
+    needle = case_id.lower()
+    matches: list[dict[str, Any]] = []
+    for entry in spec_mapping:
+        criteria = [str(value).lower() for value in entry.get("criteriaIds", [])]
+        if needle not in criteria:
+            continue
+        module = str(entry.get("module", ""))
+        if module not in (suite, module_alias):
+            continue
+        matches.append(entry)
+    return matches
+
+
+def summarize_suite_coverage(
+    suite: str,
+    *,
+    spec_mapping: list[dict[str, Any]],
+    case_results: list[dict[str, Any]],
+    active_case_ids: Sequence[str],
+) -> dict[str, Any]:
+    """Coverage matrix for one suite, generalised from the legacy EPP variant."""
+    case_status_by_name = _case_status_index(case_results)
 
     matrix: list[dict[str, Any]] = []
-    for case_id in EPP_CASE_IDS:
-        matched_tests = [
-            entry
-            for entry in spec_mapping
-            if entry.get("module") == "epp" and case_id in entry.get("criteriaIds", [])
-        ]
-        if case_id == "epp-22":
+    for case_id in active_case_ids:
+        if suite == "epp" and case_id == "epp-22":
             matrix.append(
                 {
                     "caseId": case_id,
@@ -213,6 +365,10 @@ def summarize_epp_suite_coverage(
                 }
             )
             continue
+
+        matched_tests = _matched_tests_for_case(
+            suite=suite, case_id=case_id, spec_mapping=spec_mapping
+        )
         if not matched_tests:
             matrix.append(
                 {
@@ -266,6 +422,296 @@ def summarize_epp_suite_coverage(
     for item in matrix:
         summary[item["status"]] = summary.get(item["status"], 0) + 1
     return {"matrix": matrix, "summary": summary}
+
+
+def summarize_epp_suite_coverage(
+    *,
+    spec_mapping: list[dict[str, Any]],
+    case_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Backwards-compatible wrapper preserved for the legacy `eppSuiteCoverage` key."""
+    return summarize_suite_coverage(
+        "epp",
+        spec_mapping=spec_mapping,
+        case_results=case_results,
+        active_case_ids=EPP_CASE_IDS,
+    )
+
+
+def summarize_all_suite_coverage(
+    *,
+    repo_root: Path,
+    spec_mapping: list[dict[str, Any]],
+    case_results: list[dict[str, Any]],
+    suites: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Run `summarize_suite_coverage` for every in-scope suite."""
+    target_suites = tuple(suites) if suites else DEFAULT_SUITES
+    inc_root = repo_root / "inc"
+    out: dict[str, Any] = {}
+    for suite in target_suites:
+        case_ids: tuple[str, ...] = (
+            EPP_CASE_IDS if suite == "epp" else load_active_case_ids(suite, inc_root)
+        )
+        if not case_ids:
+            continue
+        out[suite] = summarize_suite_coverage(
+            suite,
+            spec_mapping=spec_mapping,
+            case_results=case_results,
+            active_case_ids=case_ids,
+        )
+    return out
+
+
+_FIXTURE_SUFFIXES_TEXT_LIKE = {".txt", ".example"}
+
+
+def _fixture_parses(path: Path) -> bool:
+    """Return True if the fixture's payload parses with the format-appropriate loader."""
+    try:
+        body = path.read_bytes()
+    except OSError:
+        return False
+    if not body:
+        return False
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".xml":
+            ET.fromstring(body)
+            return True
+        if suffix == ".json":
+            json.loads(body.decode("utf-8"))
+            return True
+        if suffix == ".csv":
+            import csv
+
+            for _ in csv.reader(body.decode("utf-8").splitlines()):
+                pass
+            return True
+        if suffix in {".asc", ".gpg"}:
+            return b"-----BEGIN PGP" in body
+        # Fallback for `.ryde.example`, `.txt`, `.env.example`, etc.
+        return True
+    except (ET.ParseError, ValueError, UnicodeDecodeError):
+        return False
+
+
+def _fixture_iter(fixtures_root: Path, suite: str) -> list[Path]:
+    """Return every fixture file under a suite folder, sorted, ignoring README/dirs."""
+    suite_root = fixtures_root / suite
+    if not suite_root.is_dir():
+        return []
+    items: list[Path] = []
+    for path in suite_root.iterdir():
+        if not path.is_file():
+            continue
+        if path.name == "README.md":
+            continue
+        if path.suffix == ".md":
+            continue
+        items.append(path)
+    return sorted(items, key=lambda p: p.name)
+
+
+def _split_th_subfolder(fixtures_root: Path) -> list[tuple[str, Path]]:
+    """EPP fixtures live under `fixtures/epp/th/`; report that pair when present."""
+    pairs: list[tuple[str, Path]] = []
+    th_dir = fixtures_root / "epp" / "th"
+    if th_dir.is_dir():
+        pairs.append(("epp", th_dir))
+    return pairs
+
+
+def scan_fixture_inventory(
+    fixtures_root: Path,
+    suite: str,
+    *,
+    repo_root: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Inventory the on-disk fixtures for one suite, bucketed by case_id.
+
+    ``repo_root`` is consulted to read the suite's ``cases.yaml`` so the
+    inventory rows can be correlated with the spec's active case_ids; when
+    omitted it falls back to two parents up from ``fixtures_root`` (the
+    standard internal-rst-checker layout).
+    """
+    effective_repo_root = repo_root or fixtures_root.parent.parent
+    inc_root = effective_repo_root / "inc"
+
+    if suite == "epp":
+        epp_files: list[Path] = []
+        for _name, folder in _split_th_subfolder(fixtures_root):
+            epp_files.extend(
+                p for p in folder.iterdir() if p.is_file() and p.suffix != ".md"
+            )
+        files = sorted(epp_files, key=lambda p: p.name)
+    else:
+        files = _fixture_iter(fixtures_root, suite)
+    if not files:
+        return []
+
+    case_ids: tuple[str, ...] = (
+        EPP_CASE_IDS if suite == "epp" else load_active_case_ids(suite, inc_root)
+    )
+
+    by_prefix: dict[str, list[Path]] = {}
+    for fixture in files:
+        prefix = fixture.name[:2]
+        by_prefix.setdefault(prefix, []).append(fixture)
+
+    suite_rows: list[dict[str, Any]] = []
+    seen_prefixes: set[str] = set()
+    for case_id in case_ids:
+        prefix = _case_prefix(suite, case_id)
+        if not prefix:
+            continue
+        matched = sorted(by_prefix.get(prefix, []), key=lambda p: p.name)
+        seen_prefixes.add(prefix)
+        if not matched:
+            continue
+        suite_rows.append(
+            {
+                "caseId": case_id,
+                "files": [p.name for p in matched],
+                "parses": {p.name: _fixture_parses(p) for p in matched},
+            }
+        )
+    unmapped_files = [p for p in files if p.name[:2] not in seen_prefixes]
+    if unmapped_files:
+        suite_rows.append(
+            {
+                "caseId": None,
+                "files": [p.name for p in unmapped_files],
+                "parses": {p.name: _fixture_parses(p) for p in unmapped_files},
+            }
+        )
+    return suite_rows
+
+
+def summarize_fixture_inventory(
+    *,
+    fixtures_root: Path,
+    repo_root: Path,
+    suites: Sequence[str] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Run ``scan_fixture_inventory`` for every in-scope suite."""
+    target_suites = tuple(suites) if suites else DEFAULT_SUITES
+    inventory: dict[str, list[dict[str, Any]]] = {}
+    for suite in target_suites:
+        rows = scan_fixture_inventory(fixtures_root, suite, repo_root=repo_root)
+        if rows:
+            inventory[suite] = rows
+    return inventory
+
+
+def compute_error_code_coverage(
+    fixtures: Sequence[Path],
+    error_codes: Sequence[str] | set[str],
+) -> dict[str, Any]:
+    """Cross-reference spec error codes with the byte content of ``fixtures``.
+
+    ``fixtures`` is an iterable of fixture file paths (typically a suite's
+    ``*-failure.*`` set). Returns the
+    ``{"exercised", "unexercised", "summary"}`` shape that the dashboard
+    serialises into ``report.json``.
+    """
+    code_set: set[str] = set(error_codes)
+    exercised: set[str] = set()
+    for path in fixtures:
+        try:
+            body = Path(path).read_bytes()
+        except OSError:
+            continue
+        for code in code_set:
+            if code.encode() in body:
+                exercised.add(code)
+    ordered_exercised = sorted(exercised)
+    ordered_unexercised = sorted(c for c in code_set if c not in exercised)
+    return {
+        "exercised": ordered_exercised,
+        "unexercised": ordered_unexercised,
+        "summary": {
+            "exercised": len(ordered_exercised),
+            "unexercised": len(ordered_unexercised),
+            "total": len(code_set),
+        },
+    }
+
+
+def _failure_fixtures_for(suite: str, fixtures_root: Path) -> list[Path]:
+    if suite == "epp":
+        failure_files: list[Path] = []
+        for _name, folder in _split_th_subfolder(fixtures_root):
+            failure_files.extend(folder.glob("*-failure.*"))
+        return failure_files
+    suite_root = fixtures_root / suite
+    return list(suite_root.glob("*-failure.*")) if suite_root.is_dir() else []
+
+
+def summarize_error_code_coverage(
+    *,
+    suite: str,
+    error_codes: Sequence[str] | set[str],
+    fixtures_root: Path,
+) -> dict[str, Any]:
+    """Per-suite wrapper that locates the suite's failure fixtures for you."""
+    return compute_error_code_coverage(
+        _failure_fixtures_for(suite, fixtures_root), error_codes
+    )
+
+
+def summarize_all_error_code_coverage(
+    *,
+    repo_root: Path,
+    fixtures_root: Path,
+    suites: Sequence[str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Run ``compute_error_code_coverage`` for every in-scope suite."""
+    target_suites = tuple(suites) if suites else DEFAULT_SUITES
+    inc_root = repo_root / "inc"
+    out: dict[str, dict[str, Any]] = {}
+    for suite in target_suites:
+        codes = load_error_codes(suite, inc_root)
+        if not codes:
+            continue
+        out[suite] = compute_error_code_coverage(
+            _failure_fixtures_for(suite, fixtures_root), codes
+        )
+    return out
+
+
+def summarize_maturity_rollup(
+    *,
+    suite: str,
+    case_maturity: dict[str, str],
+) -> dict[str, int]:
+    """Bucket a `{case_id: level}` map into numeric per-level counts."""
+    _ = suite  # accepted for symmetry with other summarizers; not used numerically.
+    counts: dict[str, int] = {}
+    for level in case_maturity.values():
+        key = (level or "UNKNOWN").upper()
+        counts[key] = counts.get(key, 0) + 1
+    counts["total"] = sum(v for k, v in counts.items() if k != "total")
+    return counts
+
+
+def summarize_all_maturity(
+    *,
+    repo_root: Path,
+    suites: Sequence[str] | None = None,
+) -> dict[str, dict[str, int]]:
+    """Run `rollup_maturity` for every in-scope suite."""
+    target_suites = tuple(suites) if suites else DEFAULT_SUITES
+    out: dict[str, dict[str, int]] = {}
+    for suite in target_suites:
+        cases_yaml = repo_root / "inc" / suite / "cases.yaml"
+        if not cases_yaml.is_file():
+            continue
+        rollup = rollup_maturity(cases_yaml)
+        if rollup.get("total", 0) > 0:
+            out[suite] = rollup
+    return out
 
 
 def run_pytest(*, repo_root: Path, test_files: Sequence[Path], html_report: Path, junit_report: Path) -> dict[str, Any]:
@@ -385,7 +831,8 @@ def render_terminal_table(case_results: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def render_placeholder_html(summary: dict[str, Any]) -> str:
+def render_legacy_placeholder_html(summary: dict[str, Any]) -> str:
+    """Tiny fallback used in dry-run when pytest-html didn't write report.html."""
     rows = "\n".join(
         f"<tr><td>{case['testCase']}</td><td>{case['status']}</td><td>{case['reason']}</td></tr>"
         for case in summary["caseResults"]
@@ -397,6 +844,7 @@ def render_placeholder_html(summary: dict[str, Any]) -> str:
   <h1>RST Internal Dashboard</h1>
   <p>Generated: {summary["generatedAt"]}</p>
   <p>Status: {summary["run"]["status"]}</p>
+  <p>For the full coverage view see <a href="dashboard.html">dashboard.html</a>.</p>
   <table border="1" cellspacing="0" cellpadding="6">
     <thead><tr><th>Test Case</th><th>Status</th><th>Reason</th></tr></thead>
     <tbody>{rows}</tbody>
@@ -404,6 +852,357 @@ def render_placeholder_html(summary: dict[str, Any]) -> str:
 </body>
 </html>
 """
+
+
+# Back-compat alias: external callers that import `render_placeholder_html`
+# keep working; the contract is preserved while the canonical name now flags
+# its placeholder/legacy nature.
+render_placeholder_html = render_legacy_placeholder_html
+
+
+_DASHBOARD_CSS = """
+:root {
+  --ok: #2ea44f;
+  --warn: #bf8700;
+  --bad: #cf222e;
+  --muted: #6e7781;
+  --bg: #ffffff;
+  --bg-alt: #f6f8fa;
+  --border: #d0d7de;
+  --text: #1f2328;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.5;
+}
+main { padding: 1.5rem 2rem 3rem; max-width: 1280px; margin: 0 auto; }
+h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+h2 { margin-top: 2rem; font-size: 1.15rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+h3 { margin-top: 1.25rem; font-size: 1.0rem; }
+.subtle { color: var(--muted); font-size: 0.9rem; margin: 0 0 1rem; }
+.card-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0 1.5rem; }
+.card {
+  flex: 1 1 200px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  background: var(--bg-alt);
+}
+.card .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.card .value { font-size: 1.5rem; font-weight: 600; margin-top: 0.25rem; }
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+}
+.badge-covered { background: var(--ok); }
+.badge-partial { background: var(--warn); }
+.badge-missing { background: var(--bad); }
+.badge-muted   { background: var(--muted); }
+table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; font-size: 0.85rem; }
+th, td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+tr:nth-child(even) td { background: var(--bg-alt); }
+th { background: #eaeef2; font-weight: 600; }
+details { border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.75rem; margin: 0.75rem 0; background: var(--bg); }
+details > summary { cursor: pointer; font-weight: 600; }
+details[open] > summary { margin-bottom: 0.5rem; }
+.maturity-bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--ok); margin-right: 0.25rem; vertical-align: middle; }
+footer { color: var(--muted); font-size: 0.8rem; margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+code { background: var(--bg-alt); padding: 0 4px; border-radius: 3px; font-size: 0.85rem; }
+""".strip()
+
+
+def _esc(value: Any) -> str:
+    import html as _html
+
+    return _html.escape(str(value), quote=True)
+
+
+def _cap_files(files: list[str], cap: int = 4) -> str:
+    if not files:
+        return "<em>(none)</em>"
+    shown = files[:cap]
+    extra = len(files) - len(shown)
+    text = ", ".join(f"<code>{_esc(name)}</code>" for name in shown)
+    if extra > 0:
+        text += f" <span class=\"badge badge-muted\">+{extra} more</span>"
+    return text
+
+
+def _badge_for_status(status: str) -> str:
+    return (
+        f"<span class=\"badge badge-"
+        f"{status if status in {'covered', 'partial', 'missing'} else 'muted'}\""
+        f">{_esc(status)}</span>"
+    )
+
+
+def render_html_report(summary: dict[str, Any]) -> str:
+    """Render a self-contained, no-JS dashboard view of the summary.
+
+    Output is a single HTML5 document with inline CSS — no `<script>`s,
+    no external resources beyond the ICANN spec link in the header.
+    """
+    suite_coverage = summary.get("suiteCoverage", {}) or {}
+    fixture_inventory = summary.get("fixtureInventory", {}) or {}
+    error_coverage = summary.get("errorCodeCoverage", {}) or {}
+    maturity = summary.get("maturitySummary", {}) or {}
+    case_results = summary.get("caseResults", []) or []
+
+    suite_order = sorted(
+        set(suite_coverage) | set(fixture_inventory) | set(error_coverage) | set(maturity)
+    )
+
+    totals = {"covered": 0, "partial": 0, "missing": 0}
+    for sc in suite_coverage.values():
+        s = sc.get("summary", {})
+        for k in totals:
+            totals[k] += int(s.get(k, 0))
+
+    pass_count = sum(1 for c in case_results if c.get("status") == "pass")
+    fail_count = sum(1 for c in case_results if c.get("status") in {"fail", "error"})
+    skip_count = sum(1 for c in case_results if c.get("status") == "skipped")
+
+    cards = (
+        ("Suites", str(len(suite_order))),
+        ("Cases covered", str(totals["covered"])),
+        ("Cases partial", str(totals["partial"])),
+        ("Cases missing", str(totals["missing"])),
+        ("Test cases (pass/fail/skip)", f"{pass_count}/{fail_count}/{skip_count}"),
+    )
+
+    header_html = f"""
+<header>
+  <h1>RST Internal Dashboard</h1>
+  <p class="subtle">
+    Generated <strong>{_esc(summary.get("generatedAt", "-"))}</strong>
+    • Spec <a href="https://icann.github.io/rst-test-specs/v2026.04/rst-test-specs.html">{_esc(summary.get("rstSpecVersion", "-"))}</a>
+    • Run status: <strong>{_esc(summary.get("run", {}).get("status", "-"))}</strong>
+  </p>
+  <div class="card-row">
+    {"".join(f'<div class="card"><div class="label">{_esc(lbl)}</div><div class="value">{_esc(val)}</div></div>' for lbl, val in cards)}
+  </div>
+</header>
+""".strip()
+
+    coverage_blocks: list[str] = []
+    for suite in suite_order:
+        sc = suite_coverage.get(suite, {})
+        matrix = sc.get("matrix", [])
+        if not matrix:
+            continue
+        summary_line = sc.get("summary", {})
+        rows: list[str] = []
+        for entry in matrix:
+            cid = _esc(entry.get("caseId", "-"))
+            tests = entry.get("tests", []) or []
+            test_html = (
+                "<br>".join(f"<code>{_esc(t)}</code>" for t in tests) or "<em>(none)</em>"
+            )
+            reason = _esc(entry.get("reason", "-"))
+            rows.append(
+                "<tr>"
+                f"<td><code>{cid}</code></td>"
+                f"<td>{_badge_for_status(entry.get('status', '-'))}</td>"
+                f"<td>{test_html}</td>"
+                f"<td>{reason}</td>"
+                "</tr>"
+            )
+        coverage_blocks.append(
+            f"""
+<details open>
+  <summary>{_esc(suite)} — covered {summary_line.get('covered', 0)} • partial {summary_line.get('partial', 0)} • missing {summary_line.get('missing', 0)}</summary>
+  <table>
+    <thead><tr><th>case_id</th><th>status</th><th>mapped tests</th><th>reason</th></tr></thead>
+    <tbody>
+{chr(10).join(rows)}
+    </tbody>
+  </table>
+</details>
+""".strip()
+        )
+
+    fixture_rows: list[str] = []
+    for suite in suite_order:
+        rows = fixture_inventory.get(suite, [])
+        for entry in rows:
+            cid = entry.get("caseId") or "—"
+            files = list(entry.get("files", []))
+            parses = entry.get("parses", {})
+            all_parse = all(parses.get(f, False) for f in files) if files else False
+            badge = "covered" if all_parse else "partial"
+            fixture_rows.append(
+                "<tr>"
+                f"<td><code>{_esc(suite)}</code></td>"
+                f"<td><code>{_esc(cid)}</code></td>"
+                f"<td>{_cap_files(files)}</td>"
+                f"<td>{_badge_for_status(badge)}</td>"
+                "</tr>"
+            )
+    fixture_section = (
+        '<p class="subtle">No fixtures on disk.</p>'
+        if not fixture_rows
+        else f"""
+<table>
+  <thead><tr><th>suite</th><th>case_id</th><th>files</th><th>parses</th></tr></thead>
+  <tbody>
+{chr(10).join(fixture_rows)}
+  </tbody>
+</table>
+""".strip()
+    )
+
+    error_rows: list[str] = []
+    for suite in suite_order:
+        ec = error_coverage.get(suite)
+        if not ec:
+            continue
+        summary_ec = ec.get("summary", {})
+        ex = ec.get("exercised", []) or []
+        un = ec.get("unexercised", []) or []
+        error_rows.append(
+            "<tr>"
+            f"<td><code>{_esc(suite)}</code></td>"
+            f"<td>{summary_ec.get('exercised', 0)} / {summary_ec.get('total', 0)}</td>"
+            f"<td>{_cap_files([_esc(x) for x in ex])}</td>"
+            f"<td>{_cap_files([_esc(x) for x in un])}</td>"
+            "</tr>"
+        )
+    error_section = (
+        '<p class="subtle">No error-code data.</p>'
+        if not error_rows
+        else f"""
+<table>
+  <thead><tr><th>suite</th><th>exercised / total</th><th>exercised codes</th><th>unexercised codes</th></tr></thead>
+  <tbody>
+{chr(10).join(error_rows)}
+  </tbody>
+</table>
+""".strip()
+    )
+
+    maturity_rows: list[str] = []
+    max_total = max((m.get("total", 0) for m in maturity.values()), default=1) or 1
+    for suite in suite_order:
+        m = maturity.get(suite)
+        if not m:
+            continue
+        parts = []
+        for level in ("GAMMA", "BETA", "ALPHA", "UNKNOWN"):
+            n = int(m.get(level, 0))
+            if n:
+                width = max(2, int(120 * n / max_total))
+                colour = {
+                    "GAMMA": "#2ea44f",
+                    "BETA": "#bf8700",
+                    "ALPHA": "#cf222e",
+                    "UNKNOWN": "#6e7781",
+                }[level]
+                parts.append(
+                    f"<span title=\"{level} {n}\" class=\"maturity-bar\" "
+                    f"style=\"width:{width}px;background:{colour};\""
+                    f"></span>{_esc(level)}={n}"
+                )
+        maturity_rows.append(
+            f"<tr><td><code>{_esc(suite)}</code></td><td>{m.get('total', 0)}</td><td>{' '.join(parts)}</td></tr>"
+        )
+    maturity_section = (
+        '<p class="subtle">No maturity data.</p>'
+        if not maturity_rows
+        else f"""
+<table>
+  <thead><tr><th>suite</th><th>total cases</th><th>maturity mix</th></tr></thead>
+  <tbody>
+{chr(10).join(maturity_rows)}
+  </tbody>
+</table>
+""".strip()
+    )
+
+    case_rows: list[str] = []
+    for case in case_results[:500]:  # cap to keep file size bounded
+        case_rows.append(
+            "<tr>"
+            f"<td><code>{_esc(case.get('testCase', '-'))}</code></td>"
+            f"<td>{_badge_for_status({'pass': 'covered', 'fail': 'missing', 'error': 'missing', 'skipped': 'partial'}.get(case.get('status', ''), 'partial'))}</td>"
+            f"<td>{_esc(case.get('reason', '-'))}</td>"
+            "</tr>"
+        )
+    case_section = (
+        '<p class="subtle">No test-execution results (dry-run or pytest skipped).</p>'
+        if not case_rows
+        else f"""
+<table>
+  <thead><tr><th>test case</th><th>status</th><th>reason</th></tr></thead>
+  <tbody>
+{chr(10).join(case_rows)}
+  </tbody>
+</table>
+""".strip()
+    )
+
+    footer_html = """
+<footer>
+  <p>
+    Artefacts:
+    <code>report.json</code>,
+    <code>report.html</code> (pytest-html test-execution view),
+    <code>report-junit.xml</code>.
+    This page is the internal coverage dashboard;
+    for raw test-execution detail open <code>report.html</code>.
+  </p>
+</footer>
+""".strip()
+
+    coverage_section = (
+        '<p class="subtle">No suite coverage data.</p>'
+        if not coverage_blocks
+        else "\n".join(coverage_blocks)
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>RST Internal Dashboard</title>
+  <style>{_DASHBOARD_CSS}</style>
+</head>
+<body>
+<main>
+{header_html}
+<h2>Per-suite coverage</h2>
+{coverage_section}
+<h2>Fixture inventory</h2>
+{fixture_section}
+<h2>Error-code coverage</h2>
+{error_section}
+<h2>Maturity rollup</h2>
+{maturity_section}
+<h2>Case results</h2>
+{case_section}
+{footer_html}
+</main>
+</body>
+</html>
+"""
+
+
+# Back-compat alias: `render_dashboard_html` was the working name during the
+# initial prototype; production code should call `render_html_report`.
+render_dashboard_html = render_html_report
 
 
 def build_summary(
@@ -418,6 +1217,10 @@ def build_summary(
     case_results: list[dict[str, Any]],
     fips_summary: dict[str, Any],
     epp01_connectivity: dict[str, Any],
+    suite_coverage: dict[str, Any] | None = None,
+    maturity_summary: dict[str, Any] | None = None,
+    fixture_inventory: dict[str, Any] | None = None,
+    error_code_coverage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "generatedAt": _now_iso(),
@@ -433,6 +1236,10 @@ def build_summary(
         "schemaInventory": schema_summary,
         "etcRequirementCoverage": etc_requirement_coverage,
         "eppSuiteCoverage": epp_suite_coverage,
+        "suiteCoverage": suite_coverage or {},
+        "fixtureInventory": fixture_inventory or {},
+        "errorCodeCoverage": error_code_coverage or {},
+        "maturitySummary": maturity_summary or {},
         "epp01Connectivity": epp01_connectivity,
         "fipsCheck": fips_summary,
         "caseResults": case_results,
@@ -461,6 +1268,35 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reports-dir", type=Path, help="Override reports output directory")
     parser.add_argument("--json-report", type=Path, help="Optional JSON report file path")
     parser.add_argument("--html-report", type=Path, help="Optional HTML report file path")
+    parser.add_argument(
+        "--dashboard-html",
+        type=Path,
+        help="Override the dashboard HTML output path (defaults to reports/dashboard.html)",
+    )
+    parser.add_argument(
+        "--no-dashboard",
+        action="store_true",
+        help="Skip rendering the dashboard HTML file",
+    )
+    parser.add_argument(
+        "--suite",
+        action="append",
+        help=(
+            "Limit suiteCoverage / fixtureInventory / maturitySummary to the "
+            "named suites. Repeatable; default = every default suite with "
+            "cases.yaml on disk."
+        ),
+    )
+    parser.add_argument(
+        "--skip-fixtures",
+        action="store_true",
+        help="Skip the on-disk fixture inventory walk",
+    )
+    parser.add_argument(
+        "--skip-errors",
+        action="store_true",
+        help="Skip the error-code coverage scan",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Prepare reports without running pytest")
     parser.add_argument("--live-epp01", action="store_true", help="Run live connectivity checks for epp-01")
     parser.add_argument("--epp-host", help="Override EPP host for epp-01 live checks")
@@ -536,6 +1372,37 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
             "reason": "Live epp-01 probe disabled or EPP host not provided.",
         }
 
+    suites_filter = tuple(args.suite) if args.suite else None
+    suite_coverage = summarize_all_suite_coverage(
+        repo_root=paths.repo_root,
+        spec_mapping=spec_mapping,
+        case_results=case_results,
+        suites=suites_filter,
+    )
+    fixtures_root = paths.project_root / "fixtures"
+    fixture_inventory = (
+        {}
+        if args.skip_fixtures
+        else summarize_fixture_inventory(
+            fixtures_root=fixtures_root,
+            repo_root=paths.repo_root,
+            suites=suites_filter,
+        )
+    )
+    error_code_coverage = (
+        {}
+        if args.skip_errors
+        else summarize_all_error_code_coverage(
+            repo_root=paths.repo_root,
+            fixtures_root=fixtures_root,
+            suites=suites_filter,
+        )
+    )
+    maturity_summary = summarize_all_maturity(
+        repo_root=paths.repo_root,
+        suites=suites_filter,
+    )
+
     summary = build_summary(
         paths=paths,
         discovered_tests=discovered_tests,
@@ -547,15 +1414,27 @@ def main(argv: Sequence[str] | None = None, *, project_root: Path | None = None)
         case_results=case_results,
         fips_summary=fips_summary,
         epp01_connectivity=epp01_connectivity,
+        suite_coverage=suite_coverage,
+        fixture_inventory=fixture_inventory,
+        error_code_coverage=error_code_coverage,
+        maturity_summary=maturity_summary,
     )
     write_report_files(
         summary=summary,
         reports_root=paths.reports_root,
         json_report=args.json_report.resolve() if args.json_report else None,
     )
+    dashboard_html_path = (
+        args.dashboard_html.resolve()
+        if args.dashboard_html
+        else paths.reports_root / "dashboard.html"
+    )
+    if not args.no_dashboard:
+        dashboard_html_path.parent.mkdir(parents=True, exist_ok=True)
+        dashboard_html_path.write_text(render_html_report(summary), encoding="utf-8")
     if args.dry_run and not html_report.exists():
         html_report.parent.mkdir(parents=True, exist_ok=True)
-        html_report.write_text(render_placeholder_html(summary), encoding="utf-8")
+        html_report.write_text(render_legacy_placeholder_html(summary), encoding="utf-8")
     return int(run_summary["returncode"])
 
 
