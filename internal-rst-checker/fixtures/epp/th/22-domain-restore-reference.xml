@@ -1,0 +1,20 @@
+<!--
+  epp-22 has been removed in v2026.04 of the StandardEPP test suite.
+  This file is kept as a reference fixture only and MUST NOT be expected
+  to map to an active test case in the internal checker.
+-->
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <update>
+      <domain:update xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>example.th</domain:name>
+      </domain:update>
+    </update>
+    <extension>
+      <rgp:update xmlns:rgp="urn:ietf:params:xml:ns:rgp-1.0">
+        <rgp:restore op="request"/>
+      </rgp:update>
+    </extension>
+    <clTRID>th-epp-22-restore-reference</clTRID>
+  </command>
+</epp>

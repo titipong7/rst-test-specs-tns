@@ -1,0 +1,10 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <create>
+      <host:create xmlns:host="urn:ietf:params:xml:ns:host-1.0">
+        <host:name>invalid host</host:name>
+      </host:create>
+    </create>
+    <clTRID>th-epp-11-host-create-fail</clTRID>
+  </command>
+</epp>

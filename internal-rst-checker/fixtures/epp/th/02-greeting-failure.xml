@@ -1,0 +1,11 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <greeting>
+    <svID>rst-epp-server</svID>
+    <svDate>2026-05-11T09:00:00Z</svDate>
+    <svcMenu>
+      <version>2.0</version>
+      <lang>th</lang>
+      <objURI>urn:example:custom-1.0</objURI>
+    </svcMenu>
+  </greeting>
+</epp>

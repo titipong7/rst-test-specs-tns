@@ -1,0 +1,13 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <update>
+      <host:update xmlns:host="urn:ietf:params:xml:ns:host-1.0">
+        <host:name>externally-linked.example.th</host:name>
+        <host:chg>
+          <host:name>rename-denied.example.th</host:name>
+        </host:chg>
+      </host:update>
+    </update>
+    <clTRID>th-epp-23-host-rename-fail</clTRID>
+  </command>
+</epp>

@@ -1,0 +1,13 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <update>
+      <host:update xmlns:host="urn:ietf:params:xml:ns:host-1.0">
+        <host:name>self-owned-host.example.th</host:name>
+        <host:add>
+          <host:addr ip="v4">192.0.2.10</host:addr>
+        </host:add>
+      </host:update>
+    </update>
+    <clTRID>th-epp-12-host-acl-ok</clTRID>
+  </command>
+</epp>

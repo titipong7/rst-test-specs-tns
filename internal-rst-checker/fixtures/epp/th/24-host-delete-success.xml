@@ -1,0 +1,10 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <delete>
+      <host:delete xmlns:host="urn:ietf:params:xml:ns:host-1.0">
+        <host:name>orphan-ns.example.th</host:name>
+      </host:delete>
+    </delete>
+    <clTRID>th-epp-24-host-delete-ok</clTRID>
+  </command>
+</epp>

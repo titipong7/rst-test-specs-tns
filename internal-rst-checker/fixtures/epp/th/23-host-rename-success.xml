@@ -1,0 +1,13 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <update>
+      <host:update xmlns:host="urn:ietf:params:xml:ns:host-1.0">
+        <host:name>old-ns.example.th</host:name>
+        <host:chg>
+          <host:name>new-ns.example.th</host:name>
+        </host:chg>
+      </host:update>
+    </update>
+    <clTRID>th-epp-23-host-rename-ok</clTRID>
+  </command>
+</epp>
