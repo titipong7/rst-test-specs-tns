@@ -12,6 +12,8 @@ from rst_compliance.rst_dashboard import (
     DNSSEC_OPS_CASE_ID_PATTERN,
     DashboardPaths,
     _extract_case_ids,
+    _safe_suite_segment,
+    build_arg_parser,
     build_summary,
     compute_error_code_coverage,
     discover_tests,
@@ -371,6 +373,57 @@ def test_load_case_maturity_strips_leading_utf8_bom(tmp_path: Path) -> None:
 
     maturity = load_case_maturity("foo", repo_root=tmp_path)
     assert maturity == {"foo-01": "GA", "foo-02": "BETA"}
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("dnssec-ops", "dnssec-ops"),
+        ("../etc", "etc"),
+        ("../../etc/passwd", "passwd"),
+        ("/absolute/dnssec", "dnssec"),
+        ("./dns", "dns"),
+    ],
+)
+def test_safe_suite_segment_strips_path_traversal(raw: str, expected: str) -> None:
+    """L-5: defense-in-depth normaliser strips traversal components."""
+    assert _safe_suite_segment(raw) == expected
+
+
+def test_load_active_case_ids_rejects_traversal_segment(tmp_path: Path) -> None:
+    """L-5: even if a caller bypasses argparse choices, the join cannot escape inc_root."""
+    inc_root = tmp_path / "inc"
+    suite_root = inc_root / "rdap"
+    suite_root.mkdir(parents=True)
+    (suite_root / "cases.yaml").write_text("rdap-01:\n", encoding="utf-8")
+    # A sibling decoy outside inc_root that an attacker might try to address.
+    (tmp_path / "secrets.yaml").write_text("PWNED:\n", encoding="utf-8")
+
+    # Path traversal collapses to the leaf segment; no `secrets` directory
+    # exists under inc_root, so the loader returns the empty tuple.
+    assert load_active_case_ids("../secrets", inc_root) == ()
+    # Sanity: the legitimate suite still loads.
+    assert load_active_case_ids("rdap", inc_root) == ("rdap-01",)
+
+
+def test_build_arg_parser_suite_help_mentions_every_filtered_section() -> None:
+    """L-2: the --suite help string names all four sections that it filters."""
+    parser = build_arg_parser()
+    help_text = parser.format_help()
+    for section in (
+        "suiteCoverage",
+        "fixtureInventory",
+        "errorCodeCoverage",
+        "maturitySummary",
+    ):
+        assert section in help_text, f"--suite help missing mention of {section}"
+
+
+def test_build_arg_parser_suite_rejects_unknown_suite() -> None:
+    """L-5: argparse choices=DEFAULT_SUITES guards CLI input at parse time."""
+    parser = build_arg_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--suite", "../etc"])
 
 
 def test_load_active_case_ids_reads_top_level_keys(tmp_path: Path) -> None:
