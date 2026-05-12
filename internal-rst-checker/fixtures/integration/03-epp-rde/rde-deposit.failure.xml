@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rde:deposit xmlns:rde="urn:ietf:params:xml:ns:rde-1.0" type="FULL" id="i2026-05-13-S1">
+  <rde:watermark>2026-05-13T00:00:00Z</rde:watermark>
+  <rde:contents>
+    <!--
+      integration-03 expects integration03.example to appear in the next
+      RDE deposit within 24h of its <crDate>. This deposit omits it so
+      the checker MUST raise INTEGRATION_DOMAIN_NOT_PRESENT_IN_RDE.
+    -->
+  </rde:contents>
+</rde:deposit>

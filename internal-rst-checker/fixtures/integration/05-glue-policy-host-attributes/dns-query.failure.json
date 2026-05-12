@@ -1,0 +1,11 @@
+{
+  "queries": [
+    {"qname": "ns1.integration05a.example", "qtype": "A", "rcode": "NXDOMAIN", "answer": []},
+    {"qname": "other1.integration05a.example", "qtype": "A", "rcode": "NOERROR", "answer": ["192.0.2.72"]}
+  ],
+  "observedWithinMinutes": 90,
+  "expectedFindings": [
+    "INTEGRATION_EXPECTED_GLUE_NOT_OBSERVED",
+    "INTEGRATION_UNEXPECTED_GLUE_OBSERVED"
+  ]
+}

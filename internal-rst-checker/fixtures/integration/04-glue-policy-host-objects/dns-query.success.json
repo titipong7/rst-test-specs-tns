@@ -1,0 +1,8 @@
+{
+  "queries": [
+    {"qname": "ns1.integration04.example", "qtype": "A", "rcode": "NOERROR", "answer": ["192.0.2.60"]},
+    {"qname": "ns2.integration04.example", "qtype": "A", "rcode": "NOERROR", "answer": ["192.0.2.61"]},
+    {"qname": "ns3.integration04.example", "qtype": "A", "rcode": "NXDOMAIN", "answer": []}
+  ],
+  "observedWithinMinutes": 30
+}

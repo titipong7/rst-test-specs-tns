@@ -1,0 +1,22 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <create>
+      <domain:create xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>integration05a.example</domain:name>
+        <domain:period unit="y">1</domain:period>
+        <domain:ns>
+          <domain:hostAttr>
+            <domain:hostName>ns1.integration05a.example</domain:hostName>
+            <domain:hostAddr ip="v4">192.0.2.70</domain:hostAddr>
+          </domain:hostAttr>
+          <domain:hostAttr>
+            <domain:hostName>ns2.integration05a.example</domain:hostName>
+            <domain:hostAddr ip="v4">192.0.2.71</domain:hostAddr>
+          </domain:hostAttr>
+        </domain:ns>
+        <domain:registrant>registrant-1</domain:registrant>
+      </domain:create>
+    </create>
+    <clTRID>integration-05a-create</clTRID>
+  </command>
+</epp>

@@ -1,0 +1,11 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <create>
+      <host:create xmlns:host="urn:ietf:params:xml:ns:host-1.0">
+        <host:name>ns1.integration04.example</host:name>
+        <host:addr ip="v4">192.0.2.60</host:addr>
+      </host:create>
+    </create>
+    <clTRID>integration-04-create-host</clTRID>
+  </command>
+</epp>

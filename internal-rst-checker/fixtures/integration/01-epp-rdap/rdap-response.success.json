@@ -1,0 +1,10 @@
+{
+  "rdapConformance": ["rdap_level_0"],
+  "objectClassName": "domain",
+  "ldhName": "integration01.example",
+  "status": ["active"],
+  "events": [
+    {"eventAction": "registration", "eventDate": "2026-05-12T00:00:00Z"},
+    {"eventAction": "last update of RDAP database", "eventDate": "2026-05-12T00:45:00Z"}
+  ]
+}
