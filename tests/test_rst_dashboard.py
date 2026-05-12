@@ -9,8 +9,11 @@ from rst_compliance.rst_dashboard import (
     CASE_ID_PATTERN,
     CASE_ID_PATTERNS,
     DEFAULT_SUITES,
+    DNSSEC_OPS_CASE_ID_PATTERN,
     DashboardPaths,
     _extract_case_ids,
+    _safe_suite_segment,
+    build_arg_parser,
     build_summary,
     compute_error_code_coverage,
     discover_tests,
@@ -284,6 +287,37 @@ def test_case_id_pattern_alias_preserves_existing_epp_match() -> None:
     assert CASE_ID_PATTERN in CASE_ID_PATTERNS
 
 
+@pytest.mark.parametrize(
+    "case_id",
+    [
+        "dnssecOps01-ZSKRollover",
+        "dnssecOps02-KSKRollover",
+        "dnssecOps03-AlgorithmRollover",
+    ],
+)
+def test_dnssec_ops_case_id_pattern_matches_camel_case_ids(case_id: str) -> None:
+    """L-3: dnssecOpsNN-* case_ids are matched by the new sibling pattern."""
+    assert DNSSEC_OPS_CASE_ID_PATTERN.search(case_id) is not None
+    assert case_id in _extract_case_ids(f"docstring references {case_id} here")
+
+
+def test_dnssec_ops_case_id_pattern_rejects_near_misses() -> None:
+    """L-3: DNSSEC_OPS-pattern is anchored and does not eat surrounding prose."""
+    assert DNSSEC_OPS_CASE_ID_PATTERN.search("dnssec-ops") is None
+    assert DNSSEC_OPS_CASE_ID_PATTERN.search("dnssecOps-rollover") is None
+    assert DNSSEC_OPS_CASE_ID_PATTERN.search("xdnssecOps01-ZSKRollover") is None
+    # Bounded on the right side; underscore is a word char so does not match.
+    assert DNSSEC_OPS_CASE_ID_PATTERN.search("dnssecOps01-Z_SK") is None
+
+
+def test_extract_case_ids_finds_mixed_suites_and_dnssec_ops() -> None:
+    """L-3: a doc string mentioning both standard and dnssec-ops case_ids yields both."""
+    text = "covers epp-03 login and dnssecOps01-ZSKRollover rollover"
+    extracted = _extract_case_ids(text)
+    assert "epp-03" in extracted
+    assert "dnssecOps01-ZSKRollover" in extracted
+
+
 def test_map_spec_criteria_finds_dns_zz_case_id(tmp_path: Path) -> None:
     tests_root = tmp_path / "tests"
     tests_root.mkdir(parents=True)
@@ -302,6 +336,94 @@ def test_map_spec_criteria_finds_dns_zz_case_id(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 # F2 — per-suite coverage summariser                                          #
 # --------------------------------------------------------------------------- #
+
+
+def test_load_active_case_ids_strips_leading_utf8_bom(tmp_path: Path) -> None:
+    """L-1: a leading BOM no longer causes the first case_id to be skipped."""
+    inc_root = tmp_path / "inc"
+    suite_root = inc_root / "foo"
+    suite_root.mkdir(parents=True)
+    (suite_root / "cases.yaml").write_bytes(
+        b"\xef\xbb\xbffoo-01:\n  Implemented: true\nfoo-02:\n  Implemented: true\n"
+    )
+
+    assert load_active_case_ids("foo", inc_root) == ("foo-01", "foo-02")
+
+
+def test_load_error_codes_strips_leading_utf8_bom(tmp_path: Path) -> None:
+    """L-1: BOM tolerance also applies to errors.yaml."""
+    inc_root = tmp_path / "inc"
+    suite_root = inc_root / "foo"
+    suite_root.mkdir(parents=True)
+    (suite_root / "errors.yaml").write_bytes(
+        b"\xef\xbb\xbfFOO_ERROR_A:\n  Severity: ERROR\nFOO_ERROR_B:\n  Severity: WARNING\n"
+    )
+
+    assert load_error_codes("foo", inc_root) == {"FOO_ERROR_A", "FOO_ERROR_B"}
+
+
+def test_load_case_maturity_strips_leading_utf8_bom(tmp_path: Path) -> None:
+    """L-1: maturity rollup loader is also BOM-tolerant."""
+    inc_root = tmp_path / "inc"
+    suite_root = inc_root / "foo"
+    suite_root.mkdir(parents=True)
+    (suite_root / "cases.yaml").write_bytes(
+        b"\xef\xbb\xbffoo-01:\n  Maturity: GA\nfoo-02:\n  Maturity: BETA\n"
+    )
+
+    maturity = load_case_maturity("foo", repo_root=tmp_path)
+    assert maturity == {"foo-01": "GA", "foo-02": "BETA"}
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("dnssec-ops", "dnssec-ops"),
+        ("../etc", "etc"),
+        ("../../etc/passwd", "passwd"),
+        ("/absolute/dnssec", "dnssec"),
+        ("./dns", "dns"),
+    ],
+)
+def test_safe_suite_segment_strips_path_traversal(raw: str, expected: str) -> None:
+    """L-5: defense-in-depth normaliser strips traversal components."""
+    assert _safe_suite_segment(raw) == expected
+
+
+def test_load_active_case_ids_rejects_traversal_segment(tmp_path: Path) -> None:
+    """L-5: even if a caller bypasses argparse choices, the join cannot escape inc_root."""
+    inc_root = tmp_path / "inc"
+    suite_root = inc_root / "rdap"
+    suite_root.mkdir(parents=True)
+    (suite_root / "cases.yaml").write_text("rdap-01:\n", encoding="utf-8")
+    # A sibling decoy outside inc_root that an attacker might try to address.
+    (tmp_path / "secrets.yaml").write_text("PWNED:\n", encoding="utf-8")
+
+    # Path traversal collapses to the leaf segment; no `secrets` directory
+    # exists under inc_root, so the loader returns the empty tuple.
+    assert load_active_case_ids("../secrets", inc_root) == ()
+    # Sanity: the legitimate suite still loads.
+    assert load_active_case_ids("rdap", inc_root) == ("rdap-01",)
+
+
+def test_build_arg_parser_suite_help_mentions_every_filtered_section() -> None:
+    """L-2: the --suite help string names all four sections that it filters."""
+    parser = build_arg_parser()
+    help_text = parser.format_help()
+    for section in (
+        "suiteCoverage",
+        "fixtureInventory",
+        "errorCodeCoverage",
+        "maturitySummary",
+    ):
+        assert section in help_text, f"--suite help missing mention of {section}"
+
+
+def test_build_arg_parser_suite_rejects_unknown_suite() -> None:
+    """L-5: argparse choices=DEFAULT_SUITES guards CLI input at parse time."""
+    parser = build_arg_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--suite", "../etc"])
 
 
 def test_load_active_case_ids_reads_top_level_keys(tmp_path: Path) -> None:
