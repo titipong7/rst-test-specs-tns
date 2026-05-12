@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdeEppParams:eppParams xmlns:rdeEppParams="urn:ietf:params:xml:ns:rdeEppParams-1.0">
+  <rdeEppParams:version>1.0</rdeEppParams:version>
+  <rdeEppParams:objURI>urn:example:not-a-real-uri</rdeEppParams:objURI>
+  <rdeEppParams:svcExtension>
+    <rdeEppParams:extURI>urn:example:also-not-a-real-uri</rdeEppParams:extURI>
+  </rdeEppParams:svcExtension>
+</rdeEppParams:eppParams>

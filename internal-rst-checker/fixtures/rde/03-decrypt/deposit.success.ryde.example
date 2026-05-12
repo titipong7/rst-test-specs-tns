@@ -1,0 +1,4 @@
+SYNTHETIC-PLACEHOLDER-FOR-RDE-03-HAPPY-PATH
+This file represents a valid RYDE bundle. The real bundle is a binary
+container that decrypts to one or more XML/CSV deposit files. Do not
+commit real ryde bytes to this repository.

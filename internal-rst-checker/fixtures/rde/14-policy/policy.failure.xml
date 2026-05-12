@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdePolicy:policy xmlns:rdePolicy="urn:ietf:params:xml:ns:rdePolicy-1.0"
+                   scope="">
+  <rdePolicy:element>some-element-that-does-not-exist</rdePolicy:element>
+</rdePolicy:policy>

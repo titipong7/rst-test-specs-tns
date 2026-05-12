@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdeHost:host xmlns:rdeHost="urn:ietf:params:xml:ns:rdeHost-1.0">
+  <rdeHost:name>ns1.example.example</rdeHost:name>
+  <rdeHost:roid>H0000001-EXAMPLE</rdeHost:roid>
+  <rdeHost:status s="ok"/>
+  <rdeHost:addr ip="v4">192.0.2.10</rdeHost:addr>
+  <rdeHost:clID>registrar-1</rdeHost:clID>
+</rdeHost:host>
