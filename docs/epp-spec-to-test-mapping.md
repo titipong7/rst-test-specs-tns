@@ -56,6 +56,12 @@ Each non-EPP suite now ships fixtures and a per-suite guard test under
 `internal-rst-checker/`. The table below maps each suite to its fixture
 folder and the guard test that enforces presence + syntactic validity.
 
+> **Layout note.** DNS / DNSSEC / RDE / RDAP / SRSGW / IDN / Integration
+> have been re-aligned to the flat EPP-style layout
+> (`<nn>-<slug>-{success,failure}.<ext>` directly under the suite
+> folder). DNSSEC-Ops still uses per-case sub-folders; its alignment is
+> tracked as a separate follow-up.
+
 | Suite          | Spec ids                                                                                       | Fixture folder                                                       | Guard test                                                              |
 | -------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | DNS            | `dns-zz-idna2008-compliance`, `dns-zz-consistency`                                              | `internal-rst-checker/fixtures/dns/`                                 | `internal-rst-checker/tests/dns/test_dns_fixtures_present.py`           |
