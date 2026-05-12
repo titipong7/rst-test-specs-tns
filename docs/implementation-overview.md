@@ -283,7 +283,7 @@ All implemented suites follow a consistent dependency-injection pattern:
 | `docs/dnssec-suite-implementation.md` | StandardDNSSEC + DNSSECOperations details |
 | `docs/rdap-suite-implementation.md` | StandardRDAP details |
 | `docs/rde-suite-implementation.md` | StandardRDE details |
-| `docs/pending-suite-implementation.md` | StandardIDN, MinimumRPMs, StandardIntegrationTest, StandardSRSGateway, and additional transport details |
+| `docs/pending-suite-implementation.md` | StandardIDN, MinimumRPMs, StandardIntegrationTest, StandardSRSGateway, input/expected data, and additional transport details |
 
 ---
 
