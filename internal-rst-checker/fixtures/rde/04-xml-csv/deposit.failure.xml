@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rde:deposit xmlns:rde="urn:ietf:params:xml:ns:rde-1.0" type="FULL" id="d2026-05-12-S1">
+  <rde:watermark>not-a-timestamp</rde:watermark>
+  <rde:rdeMenu xmlns:rdeMenu="urn:ietf:params:xml:ns:rdeMenu-1.0">
+    <rdeMenu:version>1.0</rdeMenu:version>
+  </rde:rdeMenu>
+  <rde:contents>
+    <rde:unknownObject/>
+  </rde:contents>
+</rde:deposit>

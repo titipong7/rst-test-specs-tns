@@ -1,0 +1,11 @@
+[
+  {
+    "name": "example",
+    "nameservers": [
+      {
+        "name": "ns1.example",
+        "v4Addrs": ["192.0.2.1"]
+      }
+    ]
+  }
+]

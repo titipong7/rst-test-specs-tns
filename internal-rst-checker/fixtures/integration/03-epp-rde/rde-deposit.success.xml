@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rde:deposit xmlns:rde="urn:ietf:params:xml:ns:rde-1.0" type="FULL" id="i2026-05-13-S1">
+  <rde:watermark>2026-05-13T00:00:00Z</rde:watermark>
+  <rde:contents>
+    <rdeDomain:domain xmlns:rdeDomain="urn:ietf:params:xml:ns:rdeDomain-1.0">
+      <rdeDomain:name>integration03.example</rdeDomain:name>
+      <rdeDomain:roid>D9000003-EXAMPLE</rdeDomain:roid>
+      <rdeDomain:status s="ok"/>
+      <rdeDomain:clID>clid-01</rdeDomain:clID>
+      <rdeDomain:crDate>2026-05-12T00:00:00Z</rdeDomain:crDate>
+      <rdeDomain:exDate>2027-05-12T00:00:00Z</rdeDomain:exDate>
+    </rdeDomain:domain>
+  </rde:contents>
+</rde:deposit>

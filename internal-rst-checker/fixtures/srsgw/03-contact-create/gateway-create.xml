@@ -1,0 +1,19 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <create>
+      <contact:create xmlns:contact="urn:ietf:params:xml:ns:contact-1.0">
+        <contact:id>srsgw-03-contact</contact:id>
+        <contact:postalInfo type="loc">
+          <contact:name>SRSGW Contact</contact:name>
+          <contact:addr>
+            <contact:street>1 Example Way</contact:street>
+            <contact:city>Bangkok</contact:city>
+            <contact:cc>TH</contact:cc>
+          </contact:addr>
+        </contact:postalInfo>
+        <contact:email>ops@example.example</contact:email>
+      </contact:create>
+    </create>
+    <clTRID>srsgw-03-contact-create</clTRID>
+  </command>
+</epp>

@@ -48,3 +48,24 @@ patterns in the test implementation.
 - epp-02..epp-04 now include Batch 1 full-spec rule checks with dedicated branch assertions.
 - epp-05..epp-27 use shared rule helpers for check semantics and success/failure flow validation, while preserving per-case `epp-xx` mapping names.
 - Latest report summary: `covered=26`, `partial=1`, `missing=0`.
+
+
+## Non-EPP Suite Fixture Pointers
+
+Each non-EPP suite now ships fixtures and a per-suite guard test under
+`internal-rst-checker/`. The table below maps each suite to its fixture
+folder and the guard test that enforces presence + syntactic validity.
+
+| Suite          | Spec ids                                                                                       | Fixture folder                                                       | Guard test                                                              |
+| -------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| DNS            | `dns-zz-idna2008-compliance`, `dns-zz-consistency`                                              | `internal-rst-checker/fixtures/dns/`                                 | `internal-rst-checker/tests/dns/test_dns_fixtures_present.py`           |
+| DNSSEC         | `dnssec-91`, `dnssec-92`, `dnssec-93`                                                            | `internal-rst-checker/fixtures/dnssec/`                              | `internal-rst-checker/tests/dnssec/test_dnssec_fixtures_present.py`     |
+| DNSSEC-Ops     | `dnssecOps01-ZSKRollover`, `dnssecOps02-KSKRollover`, `dnssecOps03-AlgorithmRollover`            | `internal-rst-checker/fixtures/dnssec-ops/`                          | `internal-rst-checker/tests/dnssec_ops/test_dnssec_ops_fixtures_present.py` |
+| RDE            | `rde-01..14`                                                                                    | `internal-rst-checker/fixtures/rde/`                                 | `internal-rst-checker/tests/rde/test_rde_fixtures_present.py`           |
+| RDAP           | `rdap-01..10`, `rdap-91`, `rdap-92`                                                              | `internal-rst-checker/fixtures/rdap/`                                | `internal-rst-checker/tests/rdap/test_rdap_fixtures_present.py`         |
+| SRSGW          | `srsgw-01..06`, `srsgw-08..15` (`srsgw-07` merged into `srsgw-06`)                               | `internal-rst-checker/fixtures/srsgw/`                               | `internal-rst-checker/tests/srsgw/test_srsgw_fixtures_present.py`       |
+| IDN            | `idn-01`, `idn-02`                                                                              | `internal-rst-checker/fixtures/idn/`                                 | `internal-rst-checker/tests/idn/test_idn_fixtures_present.py`           |
+| Integration    | `integration-01..05`                                                                            | `internal-rst-checker/fixtures/integration/`                         | `internal-rst-checker/tests/integration/test_integration_fixtures_present.py` |
+
+See `internal-rst-checker/fixtures/README.md` for the per-suite case
+tables, placeholder conventions, and skip-condition documentation.

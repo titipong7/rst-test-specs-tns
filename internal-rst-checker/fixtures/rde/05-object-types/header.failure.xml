@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdeHeader:header xmlns:rdeHeader="urn:ietf:params:xml:ns:rdeHeader-1.0">
+  <rdeHeader:tld>example</rdeHeader:tld>
+  <rdeHeader:count uri="urn:example:not-a-real-uri">5</rdeHeader:count>
+</rdeHeader:header>

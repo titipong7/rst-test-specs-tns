@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdeContact:contact xmlns:rdeContact="urn:ietf:params:xml:ns:rdeContact-1.0">
+  <rdeContact:id>contact-1</rdeContact:id>
+  <rdeContact:roid>C0000001-EXAMPLE</rdeContact:roid>
+  <rdeContact:status s="ok"/>
+  <rdeContact:postalInfo type="loc">
+    <rdeContact:name>Example Registrant</rdeContact:name>
+    <rdeContact:addr>
+      <rdeContact:street>1 Example Way</rdeContact:street>
+      <rdeContact:city>Bangkok</rdeContact:city>
+      <rdeContact:cc>TH</rdeContact:cc>
+    </rdeContact:addr>
+  </rdeContact:postalInfo>
+  <rdeContact:email>ops@example.example</rdeContact:email>
+  <rdeContact:clID>registrar-1</rdeContact:clID>
+</rdeContact:contact>

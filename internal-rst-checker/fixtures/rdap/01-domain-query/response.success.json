@@ -1,0 +1,25 @@
+{
+  "rdapConformance": ["rdap_level_0", "icann_rdap_response_profile_1"],
+  "objectClassName": "domain",
+  "handle": "D0000001-EXAMPLE",
+  "ldhName": "example.example",
+  "status": ["active"],
+  "events": [
+    {"eventAction": "registration", "eventDate": "2024-01-01T00:00:00Z"},
+    {"eventAction": "expiration",   "eventDate": "2027-01-01T00:00:00Z"},
+    {"eventAction": "last update of RDAP database", "eventDate": "2026-05-12T00:00:00Z"}
+  ],
+  "entities": [
+    {"objectClassName": "entity", "handle": "9995", "roles": ["registrar"]}
+  ],
+  "links": [
+    {"value": "https://rdap.example/example/domain/example.example",
+     "rel": "self",
+     "href": "https://rdap.example/example/domain/example.example",
+     "type": "application/rdap+json"}
+  ],
+  "notices": [
+    {"title": "Terms of Service",
+     "description": ["This synthetic notice exists for fixture purposes only."]}
+  ]
+}

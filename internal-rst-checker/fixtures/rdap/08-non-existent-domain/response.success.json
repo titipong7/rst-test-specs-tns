@@ -1,0 +1,6 @@
+{
+  "rdapConformance": ["rdap_level_0"],
+  "errorCode": 404,
+  "title": "NOT FOUND",
+  "description": ["Domain not found."]
+}

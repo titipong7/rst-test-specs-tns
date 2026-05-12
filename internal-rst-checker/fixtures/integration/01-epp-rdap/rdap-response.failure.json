@@ -1,0 +1,9 @@
+{
+  "rdapConformance": ["rdap_level_0"],
+  "errorCode": 404,
+  "title": "NOT FOUND",
+  "description": ["Domain not visible in RDAP within the 1-hour SLA window."],
+  "expectedFindings": [
+    "INTEGRATION_DOMAIN_NOT_PRESENT_IN_RDAP"
+  ]
+}

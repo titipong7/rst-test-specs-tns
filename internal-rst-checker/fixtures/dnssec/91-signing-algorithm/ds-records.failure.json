@@ -1,0 +1,13 @@
+[
+  {
+    "name": "example",
+    "dsRecords": [
+      {
+        "keyTag": 4242,
+        "alg": 5,
+        "digestType": 2,
+        "digest": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+      }
+    ]
+  }
+]

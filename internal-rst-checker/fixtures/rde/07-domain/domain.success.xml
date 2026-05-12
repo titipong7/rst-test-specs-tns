@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdeDomain:domain xmlns:rdeDomain="urn:ietf:params:xml:ns:rdeDomain-1.0">
+  <rdeDomain:name>example.example</rdeDomain:name>
+  <rdeDomain:roid>D0000001-EXAMPLE</rdeDomain:roid>
+  <rdeDomain:status s="ok"/>
+  <rdeDomain:registrant>contact-1</rdeDomain:registrant>
+  <rdeDomain:clID>registrar-1</rdeDomain:clID>
+  <rdeDomain:crDate>2024-01-01T00:00:00Z</rdeDomain:crDate>
+  <rdeDomain:exDate>2027-01-01T00:00:00Z</rdeDomain:exDate>
+</rdeDomain:domain>

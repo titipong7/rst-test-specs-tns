@@ -1,0 +1,16 @@
+{
+  "dnssecOps.csk": false,
+  "dnssecOps.algorithmRolloverZone": "alg-rollover.example",
+  "dnssecOps.primaryServers": {
+    "v4Addrs": ["192.0.2.30"]
+  },
+  "transition": {
+    "from": {"alg": 8, "name": "RSASHA256"},
+    "to":   {"alg": 5, "name": "RSASHA1"}
+  },
+  "expectedFindings": [
+    "DNSSEC_OPS_INVALID_ALGORITHM",
+    "DNSSEC_OPS_ALGORITHM_ROLLOVER_NOT_COMPLETED"
+  ],
+  "scenario": "Algorithm rollover targets a forbidden legacy algorithm (#5 RSASHA1)."
+}

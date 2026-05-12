@@ -1,0 +1,13 @@
+[
+  {
+    "name": "example",
+    "soa": {
+      "mname": "Bad_Mname.example",
+      "rname": "host master.example"
+    },
+    "apexNs": [
+      "ns1.example",
+      "xn--invalid--label.example"
+    ]
+  }
+]

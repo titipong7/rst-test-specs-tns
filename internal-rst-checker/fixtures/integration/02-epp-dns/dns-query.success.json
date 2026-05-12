@@ -1,0 +1,10 @@
+{
+  "qname": "integration02.example",
+  "qtype": "NS",
+  "rcode": "NOERROR",
+  "answer": [
+    {"name": "integration02.example", "type": "NS", "rdata": "ns1.example"},
+    {"name": "integration02.example", "type": "NS", "rdata": "ns2.example"}
+  ],
+  "observedWithinMinutes": 30
+}

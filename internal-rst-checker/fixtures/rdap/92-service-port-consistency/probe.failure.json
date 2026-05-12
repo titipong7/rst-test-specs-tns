@@ -1,0 +1,13 @@
+{
+  "host": "rdap.example",
+  "ipAddresses": ["192.0.2.80", "2001:db8::443:1"],
+  "queries": [
+    {"path": "/domain/example.example", "expectedStatus": 200, "actualStatus": 200},
+    {"path": "/domain/example.example", "expectedStatus": 200, "actualStatus": 503}
+  ],
+  "responsesIdentical": false,
+  "expectedFindings": [
+    "RDAP_SERVICE_PORT_NOT_CONSISTENT",
+    "RDAP_QUERY_FAILED"
+  ]
+}

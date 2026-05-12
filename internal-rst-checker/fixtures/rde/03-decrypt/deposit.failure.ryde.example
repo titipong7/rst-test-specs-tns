@@ -1,0 +1,3 @@
+SYNTHETIC-PLACEHOLDER-FOR-RDE-03-NEGATIVE-PATH
+This file represents a RYDE bundle whose ciphertext was encrypted with
+the wrong public key, so decryption MUST fail with RDE_DECRYPTION_FAILED.

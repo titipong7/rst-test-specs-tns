@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdeRegistrar:registrar xmlns:rdeRegistrar="urn:ietf:params:xml:ns:rdeRegistrar-1.0">
+  <rdeRegistrar:id></rdeRegistrar:id>
+  <rdeRegistrar:gurid>not-a-number</rdeRegistrar:gurid>
+</rdeRegistrar:registrar>

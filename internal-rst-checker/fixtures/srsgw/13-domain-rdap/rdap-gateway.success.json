@@ -1,0 +1,11 @@
+{
+  "rdapConformance": ["rdap_level_0"],
+  "objectClassName": "domain",
+  "ldhName": "srsgw04.example.example",
+  "status": ["active"],
+  "events": [
+    {"eventAction": "registration", "eventDate": "2026-05-12T00:00:00Z"},
+    {"eventAction": "expiration",   "eventDate": "2027-05-12T00:00:00Z"},
+    {"eventAction": "last update of RDAP database", "eventDate": "2026-05-12T01:00:05Z"}
+  ]
+}

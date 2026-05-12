@@ -1,0 +1,10 @@
+{
+  "host": "rdap.example",
+  "ipAddresses": ["192.0.2.80", "2001:db8::443:1"],
+  "queries": [
+    {"path": "/domain/example.example", "expectedStatus": 200},
+    {"path": "/entity/9995",            "expectedStatus": 200},
+    {"path": "/nameserver/ns1.example.example", "expectedStatus": 200}
+  ],
+  "responsesIdentical": true
+}

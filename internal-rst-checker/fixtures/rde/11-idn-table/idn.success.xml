@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdeIDN:idnTableRef xmlns:rdeIDN="urn:ietf:params:xml:ns:rdeIDN-1.0" id="th">
+  <rdeIDN:url>https://www.iana.org/domains/idn-tables/tables/th_th_3.0.txt</rdeIDN:url>
+  <rdeIDN:urlPolicy>https://www.iana.org/domains/idn-tables</rdeIDN:urlPolicy>
+</rdeIDN:idnTableRef>

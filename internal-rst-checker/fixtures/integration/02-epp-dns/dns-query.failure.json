@@ -1,0 +1,10 @@
+{
+  "qname": "integration02.example",
+  "qtype": "NS",
+  "rcode": "NXDOMAIN",
+  "answer": [],
+  "observedWithinMinutes": 90,
+  "expectedFindings": [
+    "INTEGRATION_DOMAIN_NOT_PRESENT_IN_DNS"
+  ]
+}

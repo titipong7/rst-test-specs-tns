@@ -1,0 +1,5 @@
+{
+  "errorCode": 302,
+  "title": "Found",
+  "description": ["Server unexpectedly redirected on a non-existent entity request."]
+}

@@ -1,0 +1,3 @@
+"name","roid","crDate","exDate","clID","status"
+"example.example","D0000001-EXAMPLE","2024-01-01T00:00:00Z","2027-01-01T00:00:00Z","registrar-1","ok"
+"second.example","D0000002-EXAMPLE","2024-02-01T00:00:00Z","2027-02-01T00:00:00Z","registrar-1","ok"

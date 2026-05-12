@@ -1,0 +1,16 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <command>
+    <create>
+      <domain:create xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
+        <domain:name>xn--invalid--label.example</domain:name>
+        <domain:registrant>registrant-1</domain:registrant>
+      </domain:create>
+    </create>
+    <extension>
+      <idn:create xmlns:idn="urn:ietf:params:xml:ns:idn-1.0">
+        <idn:table>th</idn:table>
+      </idn:create>
+    </extension>
+    <clTRID>idn-01-create-invalid-label</clTRID>
+  </command>
+</epp>

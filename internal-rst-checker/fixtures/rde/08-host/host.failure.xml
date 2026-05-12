@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdeHost:host xmlns:rdeHost="urn:ietf:params:xml:ns:rdeHost-1.0">
+  <rdeHost:name>bad host name</rdeHost:name>
+  <rdeHost:roid>BADHOST</rdeHost:roid>
+  <rdeHost:clID>registrar-1</rdeHost:clID>
+</rdeHost:host>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdeDomain:domain xmlns:rdeDomain="urn:ietf:params:xml:ns:rdeDomain-1.0">
+  <rdeDomain:name>not a hostname</rdeDomain:name>
+  <rdeDomain:roid>BADROID</rdeDomain:roid>
+  <rdeDomain:clID>registrar-1</rdeDomain:clID>
+  <rdeDomain:crDate>2099-01-01T00:00:00Z</rdeDomain:crDate>
+  <rdeDomain:exDate>1999-01-01T00:00:00Z</rdeDomain:exDate>
+</rdeDomain:domain>

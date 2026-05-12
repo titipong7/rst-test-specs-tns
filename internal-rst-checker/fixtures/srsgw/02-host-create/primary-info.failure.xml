@@ -1,0 +1,5 @@
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0">
+  <response>
+    <result code="2303"><msg>Object does not exist</msg></result>
+  </response>
+</epp>

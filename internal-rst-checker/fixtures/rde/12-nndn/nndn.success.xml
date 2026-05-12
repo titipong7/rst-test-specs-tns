@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdeNNDN:NNDN xmlns:rdeNNDN="urn:ietf:params:xml:ns:rdeNNDN-1.0">
+  <rdeNNDN:aName>blocked-name.example</rdeNNDN:aName>
+  <rdeNNDN:nameState>blocked</rdeNNDN:nameState>
+</rdeNNDN:NNDN>
